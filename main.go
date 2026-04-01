@@ -39,9 +39,6 @@ func main() {
 	ctx := log.WithContext(context.Background())
 	log.Info(ctx, "启动 Agent 服务...")
 	log.Info(ctx, "Version: %s, Build Time: %s, Git Commit: %s", Version, BuildTime, GitCommit)
-	// 创建带logid的上下文
-	ctx := log.WithContext(context.Background())
-	log.Info(ctx, "启动 Agent 服务...")
 
 	// 加载配置
 	cfg := global.DefaultConfig
