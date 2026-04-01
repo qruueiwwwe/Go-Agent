@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"agent/global"
-	"agent/log"
+	"agent/library/log"
 )
 
 var (

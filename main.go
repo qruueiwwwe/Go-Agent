@@ -9,11 +9,11 @@ import (
 	"syscall"
 
 	"agent/global"
-	log "agent/library/log/logger"
+	"agent/library/log"
+	"agent/models/service/agent"
+	"agent/models/service/calculator"
+	"agent/models/service/weather"
 	"agent/router"
-	"agent/service/agent"
-	"agent/service/calculator"
-	"agent/service/weather"
 	"agent/webapi/controllers"
 
 	"github.com/ollama/ollama/api"

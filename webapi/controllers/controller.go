@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"agent/global"
-	log "agent/library/log/logger"
-	"agent/service/agent"
+	"agent/library/log"
+	"agent/models/service/agent"
 
 	"github.com/ollama/ollama/api"
 )

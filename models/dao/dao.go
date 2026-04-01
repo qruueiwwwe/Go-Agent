@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"agent/global"
-	"agent/log"
+	"agent/library/log"
 )
 
 // UserDAO 用户数据访问层（暂未实现）

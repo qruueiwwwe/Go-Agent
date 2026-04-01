@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"agent/log"
+	"agent/library/log"
 )
 
 // ========== 校验工具 ==========

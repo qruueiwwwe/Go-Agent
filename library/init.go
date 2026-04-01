@@ -3,8 +3,8 @@ package library
 import (
 	"context"
 
-	"agent/log"
 	"agent/global"
+	"agent/library/log"
 )
 
 // InitLogger 初始化日志系统

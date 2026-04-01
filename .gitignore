@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-agent
+# agent
 main
 
 # Test binary, built with `go test -c`
