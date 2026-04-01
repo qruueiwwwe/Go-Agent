@@ -31,7 +31,7 @@ func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 	// API 路由
 	mux.HandleFunc("/api/chat", r.handleChat)
 	mux.HandleFunc("/api/health", r.handleHealth)
-	
+
 	// 文件上传相关路由
 	mux.HandleFunc("/api/upload", r.handleUpload)
 	mux.HandleFunc("/api/files", r.handleListFiles)
