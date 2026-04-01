@@ -257,7 +257,7 @@ func parseWeatherInput(input string) (string, int) {
 		days = 3
 	}
 
-	cityPatterns := []string{"今天", "明天", "后天", "七日", "七天", "一周", "7天", "天气", "未来"}
+	cityPatterns := []string{"今天", "明天", "后天", "三日", "三天", "3天", "七日", "七天", "一周", "7天", "天气", "未来"}
 	city := input
 	for _, p := range cityPatterns {
 		city = strings.ReplaceAll(city, p, "")
