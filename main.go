@@ -58,14 +58,18 @@ func main() {
 	}
 	log.Info(ctx, "Ollama 客户端初始化成功")
 
+	// 初始化 Ollama 服务
+	ollamaSvc := agent.NewOllamaService(client, cfg.Ollama.Model)
+	log.Info(ctx, "Ollama 服务初始化成功")
+
 	// 初始化工具管理器
 	toolManager := agent.NewToolManager()
 	toolManager.Register(calculator.NewCalculator())
 	toolManager.Register(weather.NewWeather())
-	log.Info(ctx, "工具注册完成: calculator, weather")
+	toolManager.Register(agent.NewFileTool(ollamaSvc, "./data"))
+	log.Info(ctx, "工具注册完成: calculator, weather, file")
 
-	// 初始化服务
-	ollamaSvc := agent.NewOllamaService(client, cfg.Ollama.Model)
+	// 初始化 Agent 服务
 	agentSvc := agent.NewAgentService(ollamaSvc, toolManager)
 	log.Info(ctx, "Agent 服务初始化完成")
 

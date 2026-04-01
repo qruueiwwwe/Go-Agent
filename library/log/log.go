@@ -120,6 +120,7 @@ func formatWithCtx(ctx context.Context, format string) string {
 
 // Info 记录Info级别日志
 func Info(ctx context.Context, format string, v ...interface{}) {
+	ensureInit()
 	msg := formatWithCtx(ctx, format)
 	infoLogger.Output(2, fmt.Sprintf(msg, v...))
 }
@@ -131,6 +132,7 @@ func Infof(ctx context.Context, format string, v ...interface{}) {
 
 // Error 记录Error级别日志
 func Error(ctx context.Context, format string, v ...interface{}) {
+	ensureInit()
 	msg := formatWithCtx(ctx, format)
 	errorLogger.Output(2, fmt.Sprintf(msg, v...))
 }
@@ -142,12 +144,14 @@ func Errorf(ctx context.Context, format string, v ...interface{}) {
 
 // Warn 记录Warn级别日志
 func Warn(ctx context.Context, format string, v ...interface{}) {
+	ensureInit()
 	msg := formatWithCtx(ctx, "[WARN] "+format)
 	infoLogger.Output(2, fmt.Sprintf(msg, v...))
 }
 
 // Debug 记录Debug级别日志
 func Debug(ctx context.Context, format string, v ...interface{}) {
+	ensureInit()
 	if config.Level == "debug" {
 		msg := formatWithCtx(ctx, "[DEBUG] "+format)
 		infoLogger.Output(2, fmt.Sprintf(msg, v...))
@@ -187,18 +191,22 @@ func ToolLog(ctx context.Context, toolName, params, result string, duration time
 	}
 }
 
-// Old compatibility functions (without ctx)
-func init() {
-	config = global.DefaultConfig.Log
-	initLoggers()
+// ensureInit 确保日志系统已初始化
+func ensureInit() {
+	once.Do(func() {
+		config = global.DefaultConfig.Log
+		initLoggers()
+	})
 }
 
 // InfoOld 兼容旧的Info调用
 func InfoOld(format string, v ...interface{}) {
+	ensureInit()
 	infoLogger.Output(2, fmt.Sprintf(format, v...))
 }
 
 // ErrorOld 兼容旧的Error调用
 func ErrorOld(format string, v ...interface{}) {
+	ensureInit()
 	errorLogger.Output(2, fmt.Sprintf(format, v...))
 }

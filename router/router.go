@@ -11,6 +11,7 @@ import (
 type Router struct {
 	chatCtrl   *controllers.ChatController
 	healthCtrl *controllers.HealthController
+	fileCtrl   *controllers.FileUploadController
 }
 
 // NewRouter 创建路由
@@ -18,6 +19,7 @@ func NewRouter(chatCtrl *controllers.ChatController) *Router {
 	return &Router{
 		chatCtrl:   chatCtrl,
 		healthCtrl: controllers.NewHealthController(),
+		fileCtrl:   controllers.NewFileUploadController(),
 	}
 }
 
@@ -29,6 +31,11 @@ func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 	// API 路由
 	mux.HandleFunc("/api/chat", r.handleChat)
 	mux.HandleFunc("/api/health", r.handleHealth)
+	
+	// 文件上传相关路由
+	mux.HandleFunc("/api/upload", r.handleUpload)
+	mux.HandleFunc("/api/files", r.handleListFiles)
+	mux.HandleFunc("/api/file/delete", r.handleDeleteFile)
 }
 
 // handleChat 处理聊天请求
@@ -41,6 +48,24 @@ func (r *Router) handleChat(w http.ResponseWriter, rq *http.Request) {
 func (r *Router) handleHealth(w http.ResponseWriter, rq *http.Request) {
 	ctx := context.Background()
 	r.healthCtrl.Health(ctx, w, rq)
+}
+
+// handleUpload 处理文件上传
+func (r *Router) handleUpload(w http.ResponseWriter, rq *http.Request) {
+	ctx := context.Background()
+	r.fileCtrl.Upload(ctx, w, rq)
+}
+
+// handleListFiles 处理获取文件列表
+func (r *Router) handleListFiles(w http.ResponseWriter, rq *http.Request) {
+	ctx := context.Background()
+	r.fileCtrl.ListFiles(ctx, w, rq)
+}
+
+// handleDeleteFile 处理删除文件
+func (r *Router) handleDeleteFile(w http.ResponseWriter, rq *http.Request) {
+	ctx := context.Background()
+	r.fileCtrl.DeleteFile(ctx, w, rq)
 }
 
 // HandlerFunc 包装控制器方法为 http.HandlerFunc

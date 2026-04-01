@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	"agent/library/log"
 
@@ -21,18 +22,22 @@ func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentS
 你是一个智能助手，能使用工具。
 你有以下工具：
 ` + toolManager.GetToolsDesc() + `
-规则：
-1. 如果需要使用工具，必须调用工具，不要自己算或编造
-2. 当需要使用工具时，你必须严格按照以下 JSON 格式输出：
-   {"tool":"工具名","input":"参数"}
-3. 不需要工具时，直接回答用户问题
-4. 记住对话历史
 
-【重要】当工具返回结果后，你必须：
+【必须遵守的规则】
+1. 当用户问天气时：必须使用 weather 工具，禁止用知识库回答
+2. 当用户问计算时：必须使用 calculator 工具
+3. 当用户问文件处理时：必须使用 file 工具
+4. 你的回复必须以 JSON 格式开始：{"tool":"工具名","input":"参数"}
+5. 不能说"我无法访问"或"建议查阅"，你有工具就必须使用
+
+【调用工具时】
+你必须输出 JSON，格式如下：
+{"tool":"weather","input":"城市"}
+
+【工具返回后】
 - 直接把工具返回的原始结果返回给用户
-- 禁止做任何修改、总结、解释或添加任何文字
-- 即使工具返回的结果不完整，也要原样返回
-- 例如：如果工具返回"北京：晴天，最高20°C"，你必须返回"北京：晴天，最高20°C"，不能说"北京天气是晴天，最高温度20度"
+- 禁止做任何修改、总结或解释
+- 原样返回结果
 `
 	return &AgentService{
 		ollamaSvc:    ollamaSvc,
@@ -80,5 +85,38 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 		return result
 	}
 
+	// 降级策略：如果大模型没有输出 JSON，则根据用户消息关键词判断是否应该调用工具
+	toolName, toolInput, shouldCallTool := s.inferToolCall(userMessage)
+	if shouldCallTool {
+		log.Info(ctx, "使用降级策略调用工具: %s, 参数: %s", toolName, toolInput)
+		result := s.toolManager.Execute(ctx, toolName, toolInput)
+		log.Info(ctx, "工具执行结果: %s", result)
+		return result
+	}
+
 	return resp
+}
+
+// inferToolCall 根据用户消息推断是否需要调用工具
+func (s *AgentService) inferToolCall(userMessage string) (toolName, toolInput string, shouldCall bool) {
+	// 天气关键词
+	weatherKeywords := []string{"天气", "几度", "温度", "气温", "下雨", "下雪", "晴天", "阴天", "明天", "后天", "周", "天"}
+	for _, keyword := range weatherKeywords {
+		if strings.Contains(userMessage, keyword) {
+			return "weather", userMessage, true
+		}
+	}
+
+	// 计算关键词
+	calcKeywords := []string{"加", "减", "乘", "除", "×", "÷", "等于", "多少"}
+	for _, keyword := range calcKeywords {
+		if strings.Contains(userMessage, keyword) {
+			// 但要排除"几度"这样的天气问题
+			if !strings.Contains(userMessage, "度") || strings.Contains(userMessage, "几度") {
+				return "calculator", userMessage, true
+			}
+		}
+	}
+
+	return "", "", false
 }

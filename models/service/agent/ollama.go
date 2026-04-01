@@ -68,3 +68,14 @@ func (s *OllamaService) ParseToolCall(response string) (toolName, toolInput stri
 func TrimSpace(s string) string {
 	return strings.TrimSpace(s)
 }
+
+// generateText 使用大模型生成文本（用于 FileTool 处理）
+func (s *OllamaService) GenerateText(ctx context.Context, prompt string) (string, error) {
+	messages := []api.Message{
+		{
+			Role:    "user",
+			Content: prompt,
+		},
+	}
+	return s.Chat(ctx, messages)
+}

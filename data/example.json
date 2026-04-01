@@ -1,0 +1,18 @@
+{
+  "name": "FileTool Test",
+  "version": "1.0.0",
+  "description": "Test data for FileTool JSON parsing",
+  "features": [
+    "parse",
+    "code_analyze",
+    "convert"
+  ],
+  "author": {
+    "name": "Agent",
+    "email": "agent@example.com"
+  },
+  "config": {
+    "allowedBasePath": "./data",
+    "maxFileSize": 10485760
+  }
+}
