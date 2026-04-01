@@ -32,15 +32,42 @@ func TestParseWeatherInput(t *testing.T) {
 			days int
 		}
 	}{
-		{"Simple city", "北京", struct{ city string; days int }{city: "北京", days: 1}},
-		{"Tomorrow", "北京明天", struct{ city string; days int }{city: "北京", days: 2}},
-		{"Day after tomorrow", "上海后天", struct{ city string; days int }{city: "上海", days: 3}},
-		{"Three days", "广州三天", struct{ city string; days int }{city: "广州", days: 3}},
-		{"Seven days", "深圳七天", struct{ city string; days int }{city: "深圳", days: 7}},
-		{"Seven days with number", "杭州7天", struct{ city string; days int }{city: "杭州", days: 7}},
-		{"One week", "南京一周", struct{ city string; days int }{city: "南京", days: 7}},
-		{"Future seven days", "苏州未来七天", struct{ city string; days int }{city: "苏州", days: 7}},
-		{"With spaces", " 北京 明天 ", struct{ city string; days int }{city: "北京", days: 2}},
+		{"Simple city", "北京", struct {
+			city string
+			days int
+		}{city: "北京", days: 1}},
+		{"Tomorrow", "北京明天", struct {
+			city string
+			days int
+		}{city: "北京", days: 2}},
+		{"Day after tomorrow", "上海后天", struct {
+			city string
+			days int
+		}{city: "上海", days: 3}},
+		{"Three days", "广州三天", struct {
+			city string
+			days int
+		}{city: "广州", days: 3}},
+		{"Seven days", "深圳七天", struct {
+			city string
+			days int
+		}{city: "深圳", days: 7}},
+		{"Seven days with number", "杭州7天", struct {
+			city string
+			days int
+		}{city: "杭州", days: 7}},
+		{"One week", "南京一周", struct {
+			city string
+			days int
+		}{city: "南京", days: 7}},
+		{"Future seven days", "苏州未来七天", struct {
+			city string
+			days int
+		}{city: "苏州", days: 7}},
+		{"With spaces", " 北京 明天 ", struct {
+			city string
+			days int
+		}{city: "北京", days: 2}},
 	}
 
 	for _, tt := range tests {

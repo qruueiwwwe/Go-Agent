@@ -9,15 +9,15 @@ import (
 
 // Router 路由结构
 type Router struct {
-	chatCtrl    *controllers.ChatController
-	healthCtrl  *controllers.HealthController
+	chatCtrl   *controllers.ChatController
+	healthCtrl *controllers.HealthController
 }
 
 // NewRouter 创建路由
 func NewRouter(chatCtrl *controllers.ChatController) *Router {
 	return &Router{
-		chatCtrl:    chatCtrl,
-		healthCtrl:  controllers.NewHealthController(),
+		chatCtrl:   chatCtrl,
+		healthCtrl: controllers.NewHealthController(),
 	}
 }
 

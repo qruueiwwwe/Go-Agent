@@ -23,9 +23,9 @@ type ServerConfig struct {
 
 // OllamaConfig Ollama 配置
 type OllamaConfig struct {
-	Host      string // 地址
-	Model     string // 模型名称
-	Timeout   time.Duration // 超时时间
+	Host    string        // 地址
+	Model   string        // 模型名称
+	Timeout time.Duration // 超时时间
 }
 
 // LogConfig 日志配置

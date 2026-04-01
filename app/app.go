@@ -33,7 +33,7 @@ func RegisterService(svc Service) {
 // StartAll 启动所有服务
 func StartAll(ctx context.Context) error {
 	log.Info(ctx, "开始启动所有服务...")
-	
+
 	for name, svc := range services {
 		log.Info(ctx, "启动服务: %s", name)
 		if err := svc.Start(ctx); err != nil {
@@ -42,7 +42,7 @@ func StartAll(ctx context.Context) error {
 		}
 		log.Info(ctx, "服务启动成功: %s", name)
 	}
-	
+
 	log.Info(ctx, "所有服务启动完成")
 	return nil
 }
@@ -68,7 +68,7 @@ func StopAll(ctx context.Context) error {
 // MySQLService MySQL服务（暂未实现）
 type MySQLService struct{}
 
-func (m *MySQLService) Name() string        { return "mysql" }
+func (m *MySQLService) Name() string { return "mysql" }
 func (m *MySQLService) Start(ctx context.Context) error {
 	log.Info(ctx, "MySQL 服务启动（占位）")
 	return nil
@@ -81,7 +81,7 @@ func (m *MySQLService) Stop(ctx context.Context) error {
 // RedisService Redis服务（暂未实现）
 type RedisService struct{}
 
-func (r *RedisService) Name() string        { return "redis" }
+func (r *RedisService) Name() string { return "redis" }
 func (r *RedisService) Start(ctx context.Context) error {
 	log.Info(ctx, "Redis 服务启动（占位）")
 	return nil

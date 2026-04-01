@@ -20,32 +20,32 @@ const (
 	ErrCodeOllamaModelError ErrorCode = 3004 // 模型错误
 
 	// 工具相关错误 4000-4999
-	ErrCodeToolNotFound   ErrorCode = 4001 // 工具未找到
-	ErrCodeToolExecute    ErrorCode = 4002 // 工具执行失败
-	ErrCodeToolParams     ErrorCode = 4003 // 工具参数错误
+	ErrCodeToolNotFound ErrorCode = 4001 // 工具未找到
+	ErrCodeToolExecute  ErrorCode = 4002 // 工具执行失败
+	ErrCodeToolParams   ErrorCode = 4003 // 工具参数错误
 
 	// 天气API相关错误 5000-5999
-	ErrCodeWeatherAPI     ErrorCode = 5001 // 天气API请求失败
-	ErrCodeWeatherCity     ErrorCode = 5002 // 城市不支持
-	ErrCodeWeatherData    ErrorCode = 5003 // 天气数据解析失败
+	ErrCodeWeatherAPI  ErrorCode = 5001 // 天气API请求失败
+	ErrCodeWeatherCity ErrorCode = 5002 // 城市不支持
+	ErrCodeWeatherData ErrorCode = 5003 // 天气数据解析失败
 )
 
 // ErrorType 错误类型
 type ErrorType string
 
 const (
-	ErrTypeSystem    ErrorType = "system"    // 系统错误
-	ErrTypeBusiness  ErrorType = "business"  // 业务错误
+	ErrTypeSystem     ErrorType = "system"      // 系统错误
+	ErrTypeBusiness   ErrorType = "business"    // 业务错误
 	ErrTypeThirdParty ErrorType = "third_party" // 第三方服务错误
-	ErrTypeValidate  ErrorType = "validate"  // 验证错误
+	ErrTypeValidate   ErrorType = "validate"    // 验证错误
 )
 
 // Error 错误结构
 type Error struct {
-	Code      ErrorCode `json:"code"`
-	Type      ErrorType `json:"type"`
-	Message   string    `json:"message"`
-	Details   string    `json:"details,omitempty"`
+	Code    ErrorCode `json:"code"`
+	Type    ErrorType `json:"type"`
+	Message string    `json:"message"`
+	Details string    `json:"details,omitempty"`
 }
 
 // NewError 创建新错误
