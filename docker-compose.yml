@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # Agent 服务
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-app
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      - SERVER_PORT=8080
+      - OLLAMA_HOST=host.docker.internal:11434
+      - OLLAMA_MODEL=qwen:7b
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # Ollama 服务（可选，如果本地已运行可注释）
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # MySQL 服务（可选，用于数据存储）
+  mysql:
+    image: mysql:8.0
+    container_name: agent-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=agent
+      - MYSQL_USER=agent
+      - MYSQL_PASSWORD=agent123
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # Redis 服务（可选，用于缓存）
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # Nginx 反向代理（可选）
+  nginx:
+    image: nginx:alpine
+    container_name: agent-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - agent
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+volumes:
+  ollama_data:
+    driver: local
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  agent-network:
+    driver: bridge

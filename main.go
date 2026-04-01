@@ -19,7 +19,26 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
+// 版本信息，通过 ldflags 注入
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
 func main() {
+	// 显示版本信息
+	if len(os.Args) > 1 && os.Args[1] == "version" {
+		fmt.Printf("Agent Version: %s\n", Version)
+		fmt.Printf("Build Time: %s\n", BuildTime)
+		fmt.Printf("Git Commit: %s\n", GitCommit)
+		os.Exit(0)
+	}
+
+	// 创建带logid的上下文
+	ctx := log.WithContext(context.Background())
+	log.Info(ctx, "启动 Agent 服务...")
+	log.Info(ctx, "Version: %s, Build Time: %s, Git Commit: %s", Version, BuildTime, GitCommit)
 	// 创建带logid的上下文
 	ctx := log.WithContext(context.Background())
 	log.Info(ctx, "启动 Agent 服务...")
@@ -64,6 +83,7 @@ func main() {
 
 	log.Info(ctx, "服务启动成功，监听端口 %s", cfg.Server.Port)
 	fmt.Println("=== Agent 服务已启动 ===")
+	fmt.Printf("Version: %s\n", Version)
 	fmt.Println("前端地址：http://localhost:" + cfg.Server.Port)
 	fmt.Println("API 地址：http://localhost:" + cfg.Server.Port + "/api/chat")
 
