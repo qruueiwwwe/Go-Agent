@@ -147,15 +147,10 @@ func (s *AgentService) inferToolCall(userMessage string) (toolName, toolInput st
 		}
 	}
 
-	// 计算关键词
-	calcKeywords := []string{"加", "减", "乘", "除", "×", "÷", "等于", "多少"}
-	for _, keyword := range calcKeywords {
-		if strings.Contains(userMessage, keyword) {
-			if !strings.Contains(userMessage, "度") || strings.Contains(userMessage, "几度") {
-				return "calculator", userMessage, true
-			}
-		}
-	}
+	// 注意：不添加计算工具的降级策略
+	// 原因：大模型可以直接进行数学计算，而计算工具只支持 "3762+57778*6/333" 这样的数学表达式格式
+	// 如果用户用自然语言（如"三千七百六十二"）表达数字，直接让大模型处理更好
+	// 只有在大模型无法处理时，用户才需要用标准数学表达式格式
 
 	return "", "", false
 }
