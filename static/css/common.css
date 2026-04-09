@@ -1,0 +1,323 @@
+/* ============================================
+   global.css - 全局样式、重置、工具类
+   ============================================ */
+
+/* 1. CSS 重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+/* 2. 基础排版 */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0.5em 0;
+}
+
+h1 { font-size: 2em; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.1em; }
+h5 { font-size: 1em; }
+h6 { font-size: 0.9em; }
+
+p {
+    margin: 0.5em 0;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+input, textarea, select {
+    font-family: inherit;
+    font-size: inherit;
+}
+
+/* 3. 列表重置 */
+ul, ol {
+    list-style: none;
+}
+
+/* 4. 图片 */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* 5. 滚动条美化 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* 6. 工具类 */
+
+/* Flex 布局 */
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.flex-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.flex-1 {
+    flex: 1;
+}
+
+.gap-4 {
+    gap: 0.25rem;
+}
+
+.gap-8 {
+    gap: 0.5rem;
+}
+
+.gap-12 {
+    gap: 0.75rem;
+}
+
+.gap-16 {
+    gap: 1rem;
+}
+
+.gap-20 {
+    gap: 1.25rem;
+}
+
+/* Grid 布局 */
+.grid {
+    display: grid;
+}
+
+/* 位置 */
+.absolute {
+    position: absolute;
+}
+
+.relative {
+    position: relative;
+}
+
+.fixed {
+    position: fixed;
+}
+
+/* 显示/隐藏 */
+.hidden {
+    display: none !important;
+}
+
+.visible {
+    visibility: visible;
+}
+
+.invisible {
+    visibility: hidden;
+}
+
+.block {
+    display: block;
+}
+
+.inline {
+    display: inline;
+}
+
+.inline-block {
+    display: inline-block;
+}
+
+/* 文本处理 */
+.text-left {
+    text-align: left;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* 宽高 */
+.w-full {
+    width: 100%;
+}
+
+.h-full {
+    height: 100%;
+}
+
+.h-screen {
+    height: 100vh;
+}
+
+/* 边距 */
+.p-0 { padding: 0; }
+.p-4 { padding: 0.25rem; }
+.p-8 { padding: 0.5rem; }
+.p-12 { padding: 0.75rem; }
+.p-16 { padding: 1rem; }
+.p-20 { padding: 1.25rem; }
+.p-24 { padding: 1.5rem; }
+
+.px-12 { padding-left: 0.75rem; padding-right: 0.75rem; }
+.px-16 { padding-left: 1rem; padding-right: 1rem; }
+.py-8 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.py-12 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+
+.m-0 { margin: 0; }
+.m-4 { margin: 0.25rem; }
+.m-8 { margin: 0.5rem; }
+.m-12 { margin: 0.75rem; }
+.m-16 { margin: 1rem; }
+
+.mb-8 { margin-bottom: 0.5rem; }
+.mb-12 { margin-bottom: 0.75rem; }
+.mb-16 { margin-bottom: 1rem; }
+.mb-20 { margin-bottom: 1.25rem; }
+
+.mt-8 { margin-top: 0.5rem; }
+.mt-12 { margin-top: 0.75rem; }
+.mt-16 { margin-top: 1rem; }
+
+/* 背景 */
+.bg-white { background-color: white; }
+.bg-gray-50 { background-color: #fafafa; }
+.bg-gray-100 { background-color: #f3f3f3; }
+.bg-gray-200 { background-color: #e0e0e0; }
+
+/* 边框 */
+.border { border: 1px solid #ddd; }
+.border-top { border-top: 1px solid #eee; }
+.border-bottom { border-bottom: 1px solid #eee; }
+.rounded { border-radius: 6px; }
+.rounded-md { border-radius: 8px; }
+.rounded-lg { border-radius: 12px; }
+.rounded-full { border-radius: 9999px; }
+
+/* 阴影 */
+.shadow-sm {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.shadow {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-md {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-lg {
+    box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-xl {
+    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* 其他 */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-not-allowed {
+    cursor: not-allowed;
+}
+
+.opacity-50 {
+    opacity: 0.5;
+}
+
+.opacity-75 {
+    opacity: 0.75;
+}
+
+.transition {
+    transition: all 0.3s ease;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    html {
+        font-size: 14px;
+    }
+    
+    h1 { font-size: 1.5em; }
+    h2 { font-size: 1.25em; }
+    h3 { font-size: 1.1em; }
+}

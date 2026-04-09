@@ -3,437 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ollama AI Agent - 本地智能助手，支持天气查询、数学计算、文件处理">
+    <meta name="keywords" content="AI, Ollama, 智能助手, 天气, 计算, 文件处理">
+    <meta name="theme-color" content="#667eea">
+    
     <title>智能助手</title>
+    
+    <!-- 样式表 -->
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/common.css">
+    <link rel="stylesheet" href="/css/components.css">
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* 应用容器适应屏幕 */
+        html, body {
+            width: 100%;
+            height: 100%;
         }
-
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 600px;
-            height: 80vh;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            text-align: center;
         }
-
-        .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        .header p {
-            font-size: 14px;
-            opacity: 0.8;
-            margin-top: 5px;
-        }
-
-        .file-section {
-            padding: 15px 20px;
-            border-bottom: 1px solid #eee;
-            background: #fafafa;
-        }
-
-        .file-section h3 {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .file-upload-area {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        .file-input-wrapper input[type="file"] {
-            position: absolute;
-            left: -9999px;
-        }
-
-        .file-upload-btn {
-            padding: 8px 16px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.3s;
-        }
-
-        .file-upload-btn:hover {
-            background: #45a049;
-        }
-
-        .file-list {
-            font-size: 12px;
-            color: #666;
-            margin-top: 10px;
-        }
-
-        .file-item {
-            display: inline-block;
-            background: white;
-            padding: 6px 12px;
-            border-radius: 6px;
-            margin: 4px 4px 4px 0;
-            border: 1px solid #ddd;
-        }
-
-        .file-item .file-name {
-            color: #667eea;
-            text-decoration: none;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .file-item .file-size {
-            color: #999;
-            font-size: 11px;
-            margin-left: 8px;
-        }
-
-        .file-item button {
-            color: #f44336;
-            background: none;
-            border: none;
-            cursor: pointer;
-            margin-left: 8px;
-            font-size: 12px;
-            padding: 0;
-        }
-
-        .file-item button:hover {
-            color: #d32f2f;
-        }
-
-        .messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .message {
-            max-width: 80%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            line-height: 1.5;
-        }
-
-        .message.user {
-            align-self: flex-end;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.assistant {
-            align-self: flex-start;
-            background: #f0f0f0;
-            color: #333;
-            border-bottom-left-radius: 4px;
-        }
-
-        .message.error {
-            align-self: flex-start;
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .input-area {
-            padding: 20px;
-            border-top: 1px solid #eee;
-            display: flex;
-            gap: 10px;
-        }
-
-        .input-area input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #eee;
-            border-radius: 25px;
-            font-size: 16px;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .input-area input:focus {
-            border-color: #667eea;
-        }
-
-        .input-area button {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .input-area button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .input-area button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .loading {
-            display: none;
-            align-self: flex-start;
-            background: #f0f0f0;
-            padding: 12px 16px;
-            border-radius: 12px;
-            color: #666;
-        }
-
-        .loading.active {
-            display: block;
+        
+        @media (max-width: 1000px) {
+            body {
+                padding: 0;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>智能助手</h1>
-            <p>支持天气查询、数学计算、文件处理</p>
-        </div>
-        <div class="file-section">
-            <h3>📁 文件管理</h3>
-            <div class="file-upload-area">
-                <div class="file-input-wrapper">
-                    <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">
-                        📤 上传文件
-                    </button>
-                    <input type="file" id="fileInput" accept=".txt,.md,.json,.go,.py,.js,.pdf" onchange="handleFileUpload(event)">
-                </div>
-            </div>
-            <div class="file-list" id="fileList"></div>
-        </div>
-        <div class="messages" id="messages">
-            <div class="message assistant">
-                你好！我是智能助手，可以帮你查询天气或进行数学计算。有什么可以帮你的吗？
-            </div>
-        </div>
-        <div class="loading" id="loading">正在思考中...</div>
-        <div class="input-area">
-            <input type="text" id="input" placeholder="请输入你的问题..." onkeypress="handleKeyPress(event)">
-            <button onclick="sendMessage()" id="sendBtn">发送</button>
-        </div>
-    </div>
-
-    <script>
-        const messagesContainer = document.getElementById('messages');
-        const input = document.getElementById('input');
-        const sendBtn = document.getElementById('sendBtn');
-        const loading = document.getElementById('loading');
-        const fileList = document.getElementById('fileList');
-
-        // 页面加载时获取文件列表
-        window.addEventListener('load', () => {
-            loadFileList();
-        });
-
-        // 加载文件列表
-        async function loadFileList() {
-            try {
-                const response = await fetch('/api/files');
-                const data = await response.json();
-                
-                if (data.data && data.data.files) {
-                    const files = data.data.files;
-                    if (files.length === 0) {
-                        fileList.innerHTML = '<div style="color: #999; font-size: 12px;">暂无文件</div>';
-                        return;
-                    }
-                    
-                    let html = '';
-                    files.forEach(file => {
-                        const size = formatFileSize(file.size);
-                        html += `
-                            <div class="file-item">
-                                <span class="file-name" onclick="quickAnalyzeFile('${file.name}')">
-                                    ${file.name}
-                                </span>
-                                <span class="file-size">${size}</span>
-                                <button onclick="deleteFile('${file.name}')" title="删除文件">🗑️</button>
-                            </div>
-                        `;
-                    });
-                    fileList.innerHTML = html;
-                }
-            } catch (error) {
-                console.error('获取文件列表失败:', error);
-            }
-        }
-
-        // 格式化文件大小
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
-
-        // 处理文件上传
-        async function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-                if (data.code === 1000) {
-                    addMessage(`文件上传成功: ${file.name} (${formatFileSize(data.data.size)})`, 'assistant');
-                    loadFileList();
-                } else {
-                    addMessage(`上传失败: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                addMessage(`上传错误: ${error.message}`, 'error');
-            }
-
-            // 清除文件输入
-            event.target.value = '';
-        }
-
-        // 删除文件
-        async function deleteFile(filename) {
-            if (!confirm(`确定要删除文件 ${filename} 吗？`)) return;
-
-            try {
-                const response = await fetch(`/api/file/delete?filename=${filename}`, {
-                    method: 'DELETE'
-                });
-
-                const data = await response.json();
-                if (data.code === 1000) {
-                    addMessage(`文件已删除: ${filename}`, 'assistant');
-                    loadFileList();
-                } else {
-                    addMessage(`删除失败: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                addMessage(`删除错误: ${error.message}`, 'error');
-            }
-        }
-
-        // 快速分析文件（点击文件名时调用）
-        function quickAnalyzeFile(filename) {
-            const message = JSON.stringify({
-                action: "parse",
-                file: `data/${filename}`,
-                mode: "summary"
-            });
-            input.value = message;
-            sendMessage();
-        }
-
-        function addMessage(content, type) {
-            const div = document.createElement('div');
-            div.className = `message ${type}`;
-            div.textContent = content;
-            messagesContainer.appendChild(div);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        async function sendMessage() {
-            const message = input.value.trim();
-            if (!message) return;
-
-            // 显示用户消息
-            addMessage(message, 'user');
-            input.value = '';
-
-            // 禁用输入
-            sendBtn.disabled = true;
-            input.disabled = true;
-            loading.classList.add('active');
-
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ message })
-                });
-
-                const data = await response.json();
-                
-                // 检查响应状态
-                if (data.code && data.code !== 1000) {
-                    addMessage('错误：' + (data.message || '未知错误'), 'error');
-                } else if (data.data && data.data.result) {
-                    addMessage(data.data.result, 'assistant');
-                } else if (data.result) {
-                    // 兼容旧格式
-                    addMessage(data.result, 'assistant');
-                } else {
-                    addMessage('未知响应：' + JSON.stringify(data), 'error');
-                }
-            } catch (error) {
-                addMessage('请求失败：' + error.message, 'error');
-            } finally {
-                sendBtn.disabled = false;
-                input.disabled = false;
-                loading.classList.remove('active');
-                input.focus();
-            }
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
+    <!-- Vue 应用挂载点 -->
+    <div id="app"></div>
+    
+    <!-- Vue 3 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
+    
+    <!-- 应用入口 -->
+    <script type="module">
+        // 导入应用
+        import app from '/js/app.js';
+        
+        // 挂载应用
+        app.mount('#app');
+        
+        // 调试信息
+        console.log('✓ 智能助手应用已启动');
+        console.log('✓ Vue 版本:', Vue.version);
     </script>
 </body>
 </html>
