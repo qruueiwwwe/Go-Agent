@@ -91,16 +91,54 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 		return result
 	}
 
-	// 降级策略：如果大模型没有输出 JSON，则根据用户消息关键词判断是否应该调用工具
-	toolName, toolInput, shouldCallTool := s.inferToolCall(userMessage)
-	if shouldCallTool {
-		log.Info(ctx, "使用降级策略调用工具: %s, 参数: %s", toolName, toolInput)
-		result := s.toolManager.Execute(ctx, toolName, toolInput)
-		log.Info(ctx, "工具执行结果: %s", result)
-		return result
+	// 降级策略：只有在大模型响应质量差的情况下，才根据关键词调用工具
+	// 检查大模型的响应是否表明无法处理
+	if s.shouldUseFallbackStrategy(resp) {
+		toolName, toolInput, shouldCallTool := s.inferToolCall(userMessage)
+		if shouldCallTool {
+			log.Info(ctx, "使用降级策略调用工具: %s, 参数: %s", toolName, toolInput)
+			result := s.toolManager.Execute(ctx, toolName, toolInput)
+			log.Info(ctx, "工具执行结果: %s", result)
+			return result
+		}
 	}
 
 	return resp
+}
+
+// shouldUseFallbackStrategy 判断是否应该使用降级策略
+// 只有当大模型响应表明无法处理时，才使用降级策略
+func (s *AgentService) shouldUseFallbackStrategy(resp string) bool {
+	// 如果响应为空，使用降级策略
+	if strings.TrimSpace(resp) == "" {
+		return true
+	}
+
+	// 如果包含这些词汇，说明大模型无法处理，使用降级策略
+	negativeKeywords := []string{
+		"无法",
+		"不能",
+		"无法访问",
+		"无法获取",
+		"无法查询",
+		"不支持",
+		"稍后重试",
+		"请稍后",
+		"暂时不可用",
+		"无法直接",
+		"我无法",
+		"我不能",
+	}
+
+	resp = strings.ToLower(resp)
+	for _, keyword := range negativeKeywords {
+		if strings.Contains(resp, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+
+	// 否则大模型已经给出了有意义的答案，不使用降级策略
+	return false
 }
 
 // inferToolCall 根据用户消息推断是否需要调用工具
