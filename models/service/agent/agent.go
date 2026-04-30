@@ -27,13 +27,15 @@ func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentS
 1. 当用户问天气时：必须使用 weather 工具，禁止用知识库回答
 2. 当用户问计算时：必须使用 calculator 工具
 3. 当用户涉及文件操作（解析、总结、分析、查看文件等）：必须使用 file 工具
-4. 你的回复必须以 JSON 格式开始：{"tool":"工具名","input":"参数"}
-5. 不能说"我无法访问"或"建议查阅"，你有工具就必须使用它
+4. 当用户问缩写词、拼音首字母、网络用语含义时：必须使用 nbnhhsh 工具
+5. 你的回复必须以 JSON 格式开始：{"tool":"工具名","input":"参数"}
+6. 不能说"我无法访问"或"建议查阅"，你有工具就必须使用它
 
 【调用工具时的格式】
 - 天气：{"tool":"weather","input":"城市"}
 - 计算：{"tool":"calculator","input":"1+2"}
 - 文件：{"tool":"file","input":{"action":"parse","file":"文件路径","mode":"summary"}}
+- 缩写词：{"tool":"nbnhhsh","input":"缩写词"}
 
 【工具返回后】
 - 直接把工具返回的原始结果返回给用户
@@ -44,6 +46,7 @@ func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentS
 - 用户提到文件、文档、数据、代码时，必须使用 file 工具
 - 不能假装无法访问文件，因为你有 file 工具
 - 确保 action 字段填写正确：parse(解析)/code_analyze(代码分析)/convert(格式转换)
+- 用户问"xxx是什么意思"且xxx是字母缩写时，必须使用 nbnhhsh 工具
 `
 	return &AgentService{
 		ollamaSvc:    ollamaSvc,
@@ -115,9 +118,9 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 }
 
 // shouldForceToolCall 检测是否应该强制调用工具
-// 当用户问天气但大模型没有调用工具却返回了天气答案时，强制调用工具
+// 当用户问天气或缩写词含义但大模型没有调用工具却返回了答案时，强制调用工具
 func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, toolInput string, shouldCall bool) {
-	// 检测用户消息是否包含天气关键词
+	// ========== 天气工具检测 ==========
 	weatherKeywords := []string{"天气", "几度", "温度", "气温", "下雨", "下雪", "晴", "阴", "多云"}
 	hasWeatherKeyword := false
 	for _, kw := range weatherKeywords {
@@ -126,25 +129,90 @@ func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, 
 			break
 		}
 	}
-	if !hasWeatherKeyword {
-		return "", "", false
+	if hasWeatherKeyword {
+		weatherResponsePatterns := []string{
+			"天气", "气温", "温度", "晴", "阴", "多云", "雨", "雪",
+			"最高温度", "最低温度", "°C", "摄氏",
+		}
+		for _, pattern := range weatherResponsePatterns {
+			if strings.Contains(resp, pattern) {
+				city := extractCityFromMessage(userMessage)
+				return "weather", city, true
+			}
+		}
 	}
 
-	// 检测大模型返回的内容是否包含天气描述（说明编造了答案）
-	weatherResponsePatterns := []string{
-		"天气", "气温", "温度", "晴", "阴", "多云", "雨", "雪",
-		"最高温度", "最低温度", "°C", "摄氏",
+	// ========== 缩写词猜测工具检测 ==========
+	// 检测用户是否在问缩写词含义
+	if strings.Contains(userMessage, "是什么意思") || strings.Contains(userMessage, "意思") ||
+		strings.Contains(userMessage, "含义") || strings.Contains(userMessage, "指的是") {
+		// 检测大模型是否返回了类似缩写词解释的格式但没有调用工具
+		// 例如：【xxx】可能的含义：1. xxx
+		if strings.Contains(resp, "可能的含义") || strings.Contains(resp, "含义：") ||
+			strings.Contains(resp, "意思是") || strings.Contains(resp, "指的是") {
+			// 提取缩写词
+			abbr := extractAbbreviation(userMessage)
+			if abbr != "" {
+				return "nbnhhsh", abbr, true
+			}
+		}
 	}
-	for _, pattern := range weatherResponsePatterns {
-		if strings.Contains(resp, pattern) {
-			// 用户问天气，大模型返回了天气描述但没有调用工具
-			// 提取城市名并强制调用 weather 工具
-			city := extractCityFromMessage(userMessage)
-			return "weather", city, true
+
+	// 检测纯字母/数字组合（可能是缩写词）
+	abbr := extractAbbreviation(userMessage)
+	if abbr != "" && len(abbr) <= 10 {
+		// 如果大模型返回了类似解释但没有调用工具
+		if strings.Contains(resp, "可能的含义") || strings.Contains(resp, "含义：") ||
+			strings.Contains(resp, "意思是") || (strings.Contains(resp, "【") && strings.Contains(resp, "】")) {
+			return "nbnhhsh", abbr, true
 		}
 	}
 
 	return "", "", false
+}
+
+// extractAbbreviation 从用户消息中提取缩写词
+func extractAbbreviation(msg string) string {
+	// 移除常见的问题后缀
+	replacements := []string{
+		"是什么意思", "是什么含义", "是什么",
+		"的意思", "的含义", "意思", "含义",
+		"指的是什么", "指的是",
+		"？", "?", "。", "，",
+		"请问", "告诉我", "查一下",
+	}
+	result := msg
+	for _, r := range replacements {
+		result = strings.ReplaceAll(result, r, "")
+	}
+	result = strings.TrimSpace(result)
+
+	// 检查是否是纯字母/数字组合（可含符号）
+	valid := true
+	letterCount := 0
+	for _, c := range result {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			letterCount++
+		} else if c != '\'' && c != '-' && c != '_' && c != ' ' && c != ',' {
+			valid = false
+			break
+		}
+	}
+
+	// 至少要有2个字母/数字才算有效缩写词
+	if !valid || letterCount < 2 {
+		return ""
+	}
+
+	// 移除空格和逗号
+	result = strings.ReplaceAll(result, " ", "")
+	result = strings.ReplaceAll(result, ",", "")
+
+	if len(result) > 20 {
+		return ""
+	}
+
+	return result
 }
 
 // extractCityFromMessage 从用户消息中提取城市名
@@ -162,12 +230,12 @@ func extractCityFromMessage(msg string) string {
 		result = strings.ReplaceAll(result, r, "")
 	}
 	result = strings.TrimSpace(result)
-	
+
 	// 如果结果为空或太长，返回原始消息让工具自己处理
 	if result == "" || len(result) > 20 {
 		return msg
 	}
-	
+
 	return result
 }
 

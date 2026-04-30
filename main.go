@@ -10,8 +10,10 @@ import (
 
 	"agent/global"
 	"agent/library/log"
+	"agent/models/dao"
 	"agent/models/service/agent"
 	"agent/models/service/calculator"
+	"agent/models/service/nbnhhsh"
 	"agent/models/service/weather"
 	"agent/router"
 	"agent/webapi/controllers"
@@ -42,7 +44,7 @@ func main() {
 
 	// 加载配置
 	cfg := global.DefaultConfig
-	cfg.Server.Port = "8080"
+	cfg.Server.Port = "25565"
 
 	// 初始化日志
 	log.Init(cfg.Log)
@@ -62,12 +64,29 @@ func main() {
 	ollamaSvc := agent.NewOllamaService(client, cfg.Ollama.Model, cfg.Ollama.Temperature)
 	log.Info(ctx, "Ollama 服务初始化成功")
 
+	// 初始化 MySQL
+	mysql, err := dao.NewMySQL(cfg.Database)
+	if err != nil {
+		log.Error(ctx, "初始化 MySQL 失败: %v", err)
+		// MySQL 失败不阻止服务启动，只是nbnhhsh功能不可用
+	} else {
+		log.Info(ctx, "MySQL 初始化成功")
+	}
+
 	// 初始化工具管理器
 	toolManager := agent.NewToolManager()
 	toolManager.Register(calculator.NewCalculator())
 	toolManager.Register(weather.NewWeather(cfg.WeatherAPI))
 	toolManager.Register(agent.NewFileTool(ollamaSvc, "./data"))
-	log.Info(ctx, "工具注册完成: calculator, weather, file")
+
+	// 注册 nbnhhsh 工具（如果 MySQL 可用）
+	if mysql != nil {
+		nbnhhshDAO := dao.NewNbnhhshDAO(mysql)
+		toolManager.Register(nbnhhsh.NewCanYouSay(nbnhhshDAO))
+		log.Info(ctx, "工具注册完成: calculator, weather, file, nbnhhsh")
+	} else {
+		log.Info(ctx, "工具注册完成: calculator, weather, file (nbnhhsh不可用)")
+	}
 
 	// 初始化 Agent 服务
 	agentSvc := agent.NewAgentService(ollamaSvc, toolManager)

@@ -78,8 +78,9 @@ func (c *ToolController) ExecuteTool(ctx context.Context, w http.ResponseWriter,
 		// 兼容旧版本 Go
 		path := r.URL.Path
 		parts := strings.Split(path, "/")
-		if len(parts) >= 4 {
-			toolName = parts[3]
+		// /internal/tools/execute/nbnhhsh -> ["", "internal", "tools", "execute", "nbnhhsh"]
+		if len(parts) >= 5 {
+			toolName = parts[4]
 		}
 	}
 
@@ -168,6 +169,29 @@ func (c *ToolController) File(ctx context.Context, w http.ResponseWriter, r *htt
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ToolExecuteResponse{
 		Tool:   "file",
+		Input:  req.Input,
+		Result: result,
+	})
+}
+
+// Nbnhhsh 缩写词猜测工具接口
+func (c *ToolController) Nbnhhsh(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ToolExecuteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	result := c.toolManager.Execute(ctx, "nbnhhsh", req.Input)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ToolExecuteResponse{
+		Tool:   "nbnhhsh",
 		Input:  req.Input,
 		Result: result,
 	})

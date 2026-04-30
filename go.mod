@@ -3,11 +3,13 @@ module agent
 go 1.24.1
 
 require (
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/ollama/ollama v0.19.0
 	github.com/pdfcpu/pdfcpu v0.11.1
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

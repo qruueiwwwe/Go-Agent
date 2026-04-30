@@ -71,7 +71,7 @@ type WeatherAPIConfig struct {
 // DefaultConfig 默认配置
 var DefaultConfig = Config{
 	Server: ServerConfig{
-		Port:         "8080",
+		Port:         "25565",
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -94,8 +94,8 @@ var DefaultConfig = Config{
 		Host:     "localhost",
 		Port:     3306,
 		User:     "root",
-		Password: "",
-		DBName:   "agent",
+		Password: "12345678",
+		DBName:   "goagent",
 		MaxOpen:  10,
 		MaxIdle:  5,
 	},
