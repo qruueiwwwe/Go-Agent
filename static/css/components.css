@@ -52,17 +52,96 @@
     margin: 0 auto;
 }
 
-/* 文件管理区居中 */
-.file-manager {
-    padding: var(--space-4) var(--space-6);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--color-gray-50);
+/* ===== 文件管理抽拉面板 ===== */
+
+.file-manager-drawer {
     flex-shrink: 0;
-    max-height: 200px;
-    overflow-y: auto;
     max-width: 768px;
     width: 100%;
     margin: 0 auto;
+    position: relative;
+    z-index: 10;
+}
+
+/* 抽拉按钮 */
+.file-toggle-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-gray-50);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    user-select: none;
+}
+
+.file-toggle-bar:hover {
+    background: var(--color-gray-100);
+}
+
+.file-toggle-bar.active {
+    background: var(--color-primary-light);
+    border-bottom-color: var(--color-primary);
+}
+
+.file-toggle-icon {
+    font-size: var(--font-size-base);
+}
+
+.file-toggle-text {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+}
+
+.file-count-badge {
+    font-size: var(--font-size-xs);
+    background: var(--color-primary);
+    color: white;
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+    min-width: 18px;
+    text-align: center;
+}
+
+.file-toggle-arrow {
+    margin-left: auto;
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    transition: transform var(--transition-fast);
+}
+
+/* 展开面板 */
+.file-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--transition-slow);
+    background: var(--color-gray-50);
+    border-bottom: 1px solid transparent;
+}
+
+.file-manager-drawer.expanded .file-panel {
+    max-height: 300px;
+    overflow-y: auto;
+    border-bottom-color: var(--border-color);
+}
+
+.file-panel-content {
+    padding: var(--space-4) var(--space-6);
+}
+
+.file-empty {
+    color: var(--text-tertiary);
+    font-size: var(--font-size-sm);
+    text-align: center;
+    padding: var(--space-4) 0;
+}
+
+.file-uploading {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    margin-top: var(--space-2);
 }
 
 /* 输入区居中 */
