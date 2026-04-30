@@ -47,7 +47,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    max-width: 768px;
+    max-width: 960px;
     width: 100%;
     margin: 0 auto;
 }
@@ -56,7 +56,7 @@
 
 .file-manager-drawer {
     flex-shrink: 0;
-    max-width: 768px;
+    max-width: 960px;
     width: 100%;
     margin: 0 auto;
     position: relative;
@@ -152,7 +152,7 @@
     display: flex;
     gap: var(--space-3);
     flex-shrink: 0;
-    max-width: 768px;
+    max-width: 960px;
     width: 100%;
     margin: 0 auto;
 }
@@ -696,12 +696,20 @@
     text-decoration: underline;
 }
 
+/* 消息底部：时间戳 + 操作按钮 同行 */
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--space-2);
+    gap: var(--space-2);
+}
+
 /* 消息时间戳 */
 .message-timestamp {
     font-size: var(--font-size-xs);
     color: var(--text-tertiary);
-    margin-top: var(--space-2);
-    text-align: right;
+    white-space: nowrap;
 }
 
 .message.user .message-timestamp {
@@ -711,8 +719,7 @@
 /* 消息操作按钮 */
 .message-actions {
     display: flex;
-    gap: var(--space-1);
-    margin-top: var(--space-2);
+    gap: var(--space-2);
     opacity: 0;
     transition: opacity var(--transition-fast);
 }
@@ -730,6 +737,7 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all var(--transition-fast);
+    white-space: nowrap;
 }
 
 .message-action-btn:hover {

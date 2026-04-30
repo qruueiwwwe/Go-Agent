@@ -17,7 +17,7 @@ async function request(endpoint, options = {}) {
         headers: {
             'Content-Type': 'application/json'
         },
-        timeout: 30000
+        timeout: 300000
     };
     
     const config = { ...defaultOptions, ...options };

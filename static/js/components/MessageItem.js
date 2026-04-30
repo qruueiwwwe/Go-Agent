@@ -127,19 +127,16 @@ export const MessageItem = defineComponent({
         },
         
         /**
-         * 渲染时间戳
+         * 渲染底部（时间戳 + 操作按钮 同行）
          */
-        renderTimestamp() {
-            if (!this.showTimestamp || !this.formattedTime) return null;
-            
-            return h('div', { class: 'message-timestamp' }, this.formattedTime);
-        },
-        
-        /**
-         * 渲染操作按钮
-         */
-        renderActions() {
-            if (!this.canShowActions) return null;
+        renderFooter() {
+            if (!this.canShowActions) {
+                // 只显示时间戳
+                if (!this.showTimestamp || !this.formattedTime) return null;
+                return h('div', { class: 'message-footer' }, [
+                    h('span', { class: 'message-timestamp' }, this.formattedTime)
+                ]);
+            }
             
             const actions = [];
             
@@ -159,7 +156,10 @@ export const MessageItem = defineComponent({
                 }, '重新生成'));
             }
             
-            return h('div', { class: 'message-actions' }, actions);
+            return h('div', { class: 'message-footer' }, [
+                h('span', { class: 'message-timestamp' }, this.formattedTime || ''),
+                h('div', { class: 'message-actions' }, actions)
+            ]);
         }
     },
     
@@ -176,19 +176,12 @@ export const MessageItem = defineComponent({
     render() {
         const children = [
             this.renderMarkdownContent(),
-            this.renderTimestamp()
+            this.renderFooter()
         ];
-        
-        // 添加操作按钮（悬浮显示）
-        if (this.canShowActions) {
-            children.push(this.renderActions());
-        }
         
         return h('div', {
             class: this.messageClass,
-            key: this.message.id,
-            onMouseenter: () => { this.showActions = true; },
-            onMouseleave: () => { this.showActions = false; }
+            key: this.message.id
         }, [
             h('div', { class: 'message-content' }, children)
         ]);

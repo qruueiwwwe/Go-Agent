@@ -41,7 +41,8 @@ export const InputArea = defineComponent({
     
     data() {
         return {
-            input: ''
+            input: '',
+            isComposing: false
         };
     },
     
@@ -82,14 +83,29 @@ export const InputArea = defineComponent({
         },
         
         handleKeyDown(e) {
+            // IME 输入过程中（拼音/日文等），回车不发送
+            if (this.isComposing) return;
+            
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.handleSend();
             }
         },
         
-        handleInput(e) {
+        handleCompositionStart() {
+            this.isComposing = true;
+        },
+        
+        handleCompositionEnd(e) {
+            this.isComposing = false;
             this.input = e.target.value;
+        },
+        
+        handleInput(e) {
+            // compositionend 已经更新过值，避免重复
+            if (!this.isComposing) {
+                this.input = e.target.value;
+            }
         },
         
         handleSend() {
@@ -132,7 +148,9 @@ export const InputArea = defineComponent({
                     placeholder: this.placeholder,
                     disabled: this.disabled,
                     onInput: this.handleInput,
-                    onKeydown: this.handleKeyDown
+                    onKeydown: this.handleKeyDown,
+                    onCompositionstart: this.handleCompositionStart,
+                    onCompositionend: this.handleCompositionEnd
                 })
             ]),
             h('button', {
