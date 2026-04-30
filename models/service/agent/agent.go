@@ -23,30 +23,28 @@ func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentS
 你有以下工具：
 ` + toolManager.GetToolsDesc() + `
 
-【必须遵守的规则】
-1. 当用户问天气时：必须使用 weather 工具，禁止用知识库回答
-2. 当用户问计算时：必须使用 calculator 工具
-3. 当用户涉及文件操作（解析、总结、分析、查看文件等）：必须使用 file 工具
-4. 当用户问缩写词、拼音首字母、网络用语含义时：必须使用 nbnhhsh 工具
-5. 你的回复必须以 JSON 格式开始：{"tool":"工具名","input":"参数"}
-6. 不能说"我无法访问"或"建议查阅"，你有工具就必须使用它
+【工具使用规则】
+1. 天气查询：用户问实时天气时，使用 weather 工具获取准确数据
+2. 数学计算：用户需要计算时，使用 calculator 工具
+3. 文件操作：用户需要解析/分析文件时，使用 file 工具
+4. 缩写词猜测：用户问字母缩写/网络用语的含义时，使用 nbnhhsh 工具
+
+【重要】
+- 先判断用户意图，再决定是否需要工具
+- 如果用知识库能回答的问题，直接回答，不必调用工具
+- 只有需要实时数据或外部资源时才调用工具
 
 【调用工具时的格式】
-- 天气：{"tool":"weather","input":"城市"}
+{"tool":"工具名","input":"参数"}
+
+示例：
+- 天气：{"tool":"weather","input":"北京"}
 - 计算：{"tool":"calculator","input":"1+2"}
-- 文件：{"tool":"file","input":{"action":"parse","file":"文件路径","mode":"summary"}}
-- 缩写词：{"tool":"nbnhhsh","input":"缩写词"}
+- 缩写词：{"tool":"nbnhhsh","input":"yyds"}
 
 【工具返回后】
 - 直接把工具返回的原始结果返回给用户
-- 禁止做任何修改、总结或解释
-- 原样返回结果
-
-【重点】
-- 用户提到文件、文档、数据、代码时，必须使用 file 工具
-- 不能假装无法访问文件，因为你有 file 工具
-- 确保 action 字段填写正确：parse(解析)/code_analyze(代码分析)/convert(格式转换)
-- 用户问"xxx是什么意思"且xxx是字母缩写时，必须使用 nbnhhsh 工具
+- 原样返回结果，不做修改
 `
 	return &AgentService{
 		ollamaSvc:    ollamaSvc,
