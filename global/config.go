@@ -6,11 +6,12 @@ import (
 
 // Config 全局配置
 type Config struct {
-	Server   ServerConfig
-	Ollama   OllamaConfig
-	Log      LogConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
+	Server     ServerConfig
+	Ollama     OllamaConfig
+	Log        LogConfig
+	Database   DatabaseConfig
+	Redis      RedisConfig
+	WeatherAPI WeatherAPIConfig
 }
 
 // ServerConfig 服务配置
@@ -23,9 +24,10 @@ type ServerConfig struct {
 
 // OllamaConfig Ollama 配置
 type OllamaConfig struct {
-	Host    string        // 地址
-	Model   string        // 模型名称
-	Timeout time.Duration // 超时时间
+	Host        string        // 地址
+	Model       string        // 模型名称
+	Timeout     time.Duration // 超时时间
+	Temperature float64       // 温度参数（0-1，越低越稳定）
 }
 
 // LogConfig 日志配置
@@ -58,6 +60,14 @@ type RedisConfig struct {
 	PoolSize int
 }
 
+// WeatherAPIConfig 天气API配置
+type WeatherAPIConfig struct {
+	ID      string        // 开发者ID
+	Key     string        // 开发者KEY
+	BaseURL string        // API地址
+	Timeout time.Duration // 超时时间
+}
+
 // DefaultConfig 默认配置
 var DefaultConfig = Config{
 	Server: ServerConfig{
@@ -67,9 +77,10 @@ var DefaultConfig = Config{
 		IdleTimeout:  60 * time.Second,
 	},
 	Ollama: OllamaConfig{
-		Host:    "localhost:11434",
-		Model:   "qwen:7b",
-		Timeout: 120 * time.Second,
+		Host:        "localhost:11434",
+		Model:       "gemma3:4b",
+		Timeout:     120 * time.Second,
+		Temperature: 0.3,
 	},
 	Log: LogConfig{
 		Level:      "info",
@@ -94,5 +105,11 @@ var DefaultConfig = Config{
 		Password: "",
 		DB:       0,
 		PoolSize: 10,
+	},
+	WeatherAPI: WeatherAPIConfig{
+		ID:      "10016155",
+		Key:     "8b0464361cb05f30e401c0a1b9ac58ce",
+		BaseURL: "https://cn.apihz.cn/api/tianqi/tqyb.php",
+		Timeout: 10 * time.Second,
 	},
 }

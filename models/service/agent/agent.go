@@ -91,6 +91,14 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 		return result
 	}
 
+	// 强制工具调用检测：当大模型未遵循指令时
+	if forceToolName, forceToolInput, shouldForce := s.shouldForceToolCall(userMessage, resp); shouldForce {
+		log.Info(ctx, "强制调用工具（大模型未遵循指令）: %s, 参数: %s", forceToolName, forceToolInput)
+		result := s.toolManager.Execute(ctx, forceToolName, forceToolInput)
+		log.Info(ctx, "工具执行结果: %s", result)
+		return result
+	}
+
 	// 降级策略：只有在大模型响应质量差的情况下，才根据关键词调用工具
 	// 检查大模型的响应是否表明无法处理
 	if s.shouldUseFallbackStrategy(resp) {
@@ -104,6 +112,63 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 	}
 
 	return resp
+}
+
+// shouldForceToolCall 检测是否应该强制调用工具
+// 当用户问天气但大模型没有调用工具却返回了天气答案时，强制调用工具
+func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, toolInput string, shouldCall bool) {
+	// 检测用户消息是否包含天气关键词
+	weatherKeywords := []string{"天气", "几度", "温度", "气温", "下雨", "下雪", "晴", "阴", "多云"}
+	hasWeatherKeyword := false
+	for _, kw := range weatherKeywords {
+		if strings.Contains(userMessage, kw) {
+			hasWeatherKeyword = true
+			break
+		}
+	}
+	if !hasWeatherKeyword {
+		return "", "", false
+	}
+
+	// 检测大模型返回的内容是否包含天气描述（说明编造了答案）
+	weatherResponsePatterns := []string{
+		"天气", "气温", "温度", "晴", "阴", "多云", "雨", "雪",
+		"最高温度", "最低温度", "°C", "摄氏",
+	}
+	for _, pattern := range weatherResponsePatterns {
+		if strings.Contains(resp, pattern) {
+			// 用户问天气，大模型返回了天气描述但没有调用工具
+			// 提取城市名并强制调用 weather 工具
+			city := extractCityFromMessage(userMessage)
+			return "weather", city, true
+		}
+	}
+
+	return "", "", false
+}
+
+// extractCityFromMessage 从用户消息中提取城市名
+func extractCityFromMessage(msg string) string {
+	// 移除常见的关键词，提取城市名
+	replacements := []string{
+		"今天", "明天", "后天", "大后天",
+		"的天气怎么样", "天气怎么样", "的天气", "天气",
+		"温度", "气温", "几度",
+		"怎么样", "如何", "呢", "吗", "？", "?",
+		"请问", "查一下", "告诉我",
+	}
+	result := msg
+	for _, r := range replacements {
+		result = strings.ReplaceAll(result, r, "")
+	}
+	result = strings.TrimSpace(result)
+	
+	// 如果结果为空或太长，返回原始消息让工具自己处理
+	if result == "" || len(result) > 20 {
+		return msg
+	}
+	
+	return result
 }
 
 // shouldUseFallbackStrategy 判断是否应该使用降级策略

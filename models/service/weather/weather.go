@@ -6,206 +6,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+
+	"agent/global"
+	"agent/library/log"
 )
 
-// 城市坐标映射表
-var cityCoords = map[string][2]float64{
-	"北京":   {39.9042, 116.4074},
-	"上海":   {31.2304, 121.4737},
-	"广州":   {23.1291, 113.2644},
-	"深圳":   {22.5431, 114.0579},
-	"西安":   {34.3416, 108.9398},
-	"成都":   {30.5728, 104.0668},
-	"杭州":   {30.2741, 120.1551},
-	"武汉":   {30.5928, 114.3055},
-	"南京":   {32.0603, 118.7969},
-	"重庆":   {29.4316, 106.9123},
-	"天津":   {39.3434, 117.3616},
-	"苏州":   {31.2989, 120.5853},
-	"郑州":   {34.7466, 113.6253},
-	"长沙":   {28.2282, 112.9388},
-	"青岛":   {36.0671, 120.3826},
-	"沈阳":   {41.7968, 123.4315},
-	"大连":   {38.9140, 121.6147},
-	"厦门":   {24.4798, 118.0894},
-	"昆明":   {25.0406, 102.7129},
-	"哈尔滨":  {45.8038, 126.5340},
-	"长春":   {43.8171, 125.3235},
-	"福州":   {26.0745, 119.2965},
-	"南昌":   {28.6829, 115.8579},
-	"贵阳":   {26.6470, 106.6302},
-	"太原":   {37.8706, 112.5489},
-	"石家庄":  {38.0428, 114.5149},
-	"济南":   {36.6512, 117.1205},
-	"兰州":   {36.0611, 103.8343},
-	"乌鲁木齐": {43.8256, 87.6168},
-	"呼和浩特": {40.8424, 111.7492},
-	"南宁":   {22.8170, 108.3665},
-	"海口":   {20.0444, 110.1999},
-	"银川":   {38.4872, 106.2309},
-	"西宁":   {36.6171, 101.7782},
-	"拉萨":   {29.6500, 91.1000},
-	"东莞":   {23.0209, 113.7518},
-	"佛山":   {23.0218, 113.1219},
-	"无锡":   {31.4906, 120.3119},
-	"宁波":   {29.8683, 121.5440},
-	"温州":   {28.0006, 120.6994},
-	"嘉兴":   {30.7522, 120.7550},
-	"绍兴":   {30.0302, 120.5801},
-	"金华":   {29.0787, 119.6479},
-	"台州":   {28.6560, 121.4209},
-	"湖州":   {30.8929, 120.0930},
-	"徐州":   {34.2044, 117.2859},
-	"扬州":   {32.3912, 119.4250},
-	"镇江":   {32.2044, 119.4551},
-	"泰州":   {32.4559, 119.9232},
-	"南通":   {31.9802, 120.8942},
-	"盐城":   {33.3497, 120.1630},
-	"连云港":  {34.5967, 119.2216},
-	"淮安":   {33.5517, 119.0153},
-	"宿迁":   {33.9631, 118.2752},
-	"芜湖":   {31.3350, 118.4330},
-	"蚌埠":   {32.9167, 117.3889},
-	"淮南":   {32.6264, 116.9997},
-	"马鞍山":  {31.6703, 118.5076},
-	"淮北":   {33.9560, 116.7980},
-	"铜陵":   {30.9294, 117.8129},
-	"安庆":   {30.5431, 117.0634},
-	"黄山":   {29.7148, 118.3380},
-	"滁州":   {32.3017, 118.3275},
-	"阜阳":   {32.8897, 115.8143},
-	"宿州":   {33.6461, 116.9641},
-	"六安":   {31.7348, 116.5080},
-	"亳州":   {33.8446, 115.7784},
-	"池州":   {30.6644, 117.4917},
-	"宣城":   {30.9404, 118.7586},
-	"莆田":   {25.4540, 119.0078},
-	"三明":   {26.2654, 117.6389},
-	"泉州":   {24.8739, 118.6758},
-	"漳州":   {24.5134, 117.6474},
-	"南平":   {26.6418, 118.1784},
-	"龙岩":   {25.0752, 117.0173},
-	"宁德":   {26.6656, 119.5475},
-	"景德镇":  {29.2688, 117.1786},
-	"萍乡":   {27.6229, 113.8545},
-	"九江":   {29.7049, 116.0018},
-	"新余":   {27.8179, 114.9171},
-	"鹰潭":   {28.2601, 117.0693},
-	"赣州":   {25.8292, 114.9355},
-	"吉安":   {27.1117, 114.9793},
-	"宜春":   {27.8136, 114.4163},
-	"抚州":   {27.9492, 116.3582},
-	"上饶":   {28.4554, 117.9433},
-	"烟台":   {37.4639, 121.4476},
-	"潍坊":   {36.7068, 119.1619},
-	"威海":   {37.5131, 122.1205},
-	"淄博":   {36.8131, 118.0548},
-	"临沂":   {35.1041, 118.3566},
-	"枣庄":   {34.8107, 117.3237},
-	"日照":   {35.4164, 119.5269},
-	"东营":   {37.4346, 118.6747},
-	"济宁":   {35.4147, 116.5871},
-	"泰安":   {36.1949, 117.0892},
-	"德州":   {37.4360, 116.3575},
-	"聊城":   {36.4569, 115.9853},
-	"滨州":   {37.3816, 117.9706},
-	"菏泽":   {35.2333, 115.4412},
-	"洛阳":   {34.6197, 112.4540},
-	"开封":   {34.7971, 114.3074},
-	"平顶山":  {33.7668, 113.1927},
-	"安阳":   {36.0976, 114.3929},
-	"鹤壁":   {35.7478, 114.2970},
-	"新乡":   {35.3028, 113.9268},
-	"焦作":   {35.2157, 113.2419},
-	"濮阳":   {35.7616, 115.0293},
-	"许昌":   {34.0267, 113.8526},
-	"漯河":   {33.5818, 114.0420},
-	"三门峡":  {34.7726, 111.1941},
-	"南阳":   {32.9908, 112.5292},
-	"商丘":   {34.4141, 115.6563},
-	"信阳":   {32.1228, 114.0928},
-	"周口":   {33.6237, 114.6498},
-	"驻马店":  {32.9805, 114.0229},
-	"十堰":   {32.6290, 110.7980},
-	"宜昌":   {30.6918, 111.2862},
-	"襄阳":   {32.0091, 112.1226},
-	"鄂州":   {30.3911, 114.8947},
-	"荆门":   {31.0354, 112.1991},
-	"孝感":   {30.9279, 113.9268},
-	"荆州":   {30.3269, 112.2394},
-	"黄冈":   {30.4534, 114.8726},
-	"咸宁":   {29.8415, 114.3225},
-	"随州":   {31.6903, 113.3825},
-	"恩施":   {30.2720, 109.4880},
-	"韶关":   {24.8107, 113.5975},
-	"汕头":   {23.3540, 116.6824},
-	"江门":   {22.5789, 113.0816},
-	"湛江":   {21.2707, 110.3594},
-	"茂名":   {21.6631, 110.9253},
-	"肇庆":   {23.0469, 112.4657},
-	"惠州":   {23.1115, 114.4158},
-	"梅州":   {24.2881, 116.1176},
-	"汕尾":   {22.7861, 115.3644},
-	"河源":   {23.7463, 114.7006},
-	"阳江":   {21.8585, 111.9827},
-	"清远":   {23.6820, 113.0510},
-	"潮州":   {23.6618, 116.6225},
-	"揭阳":   {23.5498, 116.3728},
-	"云浮":   {22.9373, 112.0500},
-	"柳州":   {24.3263, 109.4286},
-	"桂林":   {25.2738, 110.2901},
-	"梧州":   {23.4769, 111.2791},
-	"北海":   {21.4734, 109.1193},
-	"防城港":  {21.6174, 108.3543},
-	"钦州":   {21.9674, 108.6548},
-	"贵港":   {23.1113, 109.5986},
-	"玉林":   {22.6541, 110.1818},
-	"百色":   {23.9027, 106.6181},
-	"贺州":   {24.4113, 111.5669},
-	"河池":   {24.6929, 108.0853},
-	"来宾":   {23.7500, 109.2216},
-	"崇左":   {22.3765, 107.3650},
-	"六盘水":  {26.5941, 104.8301},
-	"遵义":   {27.7256, 106.9272},
-	"安顺":   {26.2456, 105.9326},
-	"毕节":   {27.3017, 105.2830},
-	"铜仁":   {27.7183, 109.1912},
-	"曲靖":   {25.4900, 103.7962},
-	"玉溪":   {24.3518, 102.5457},
-	"保山":   {25.1202, 99.1671},
-	"昭通":   {27.3380, 103.7172},
-	"丽江":   {26.8721, 100.2299},
-	"普洱":   {22.7869, 100.9665},
-	"临沧":   {23.8865, 100.0866},
-	"大理":   {25.6066, 100.2676},
-	"咸阳":   {34.3291, 108.7091},
-	"渭南":   {34.4994, 109.5101},
-	"铜川":   {34.8973, 108.9456},
-	"宝鸡":   {34.3619, 107.2372},
-	"商洛":   {33.8680, 109.9404},
-	"榆林":   {38.2852, 109.7348},
-	"延安":   {36.5853, 109.4898},
-	"汉中":   {33.0677, 107.0230},
-	"安康":   {32.6853, 109.0295},
-	"石嘴山":  {38.9842, 106.3839},
-	"吴忠":   {37.9976, 106.1991},
-	"固原":   {36.0162, 106.2421},
-	"中卫":   {37.5146, 105.1893},
-	"海东":   {36.5023, 102.1040},
-	"克拉玛依": {45.5798, 84.8892},
-	"吐鲁番":  {42.9513, 89.1895},
-	"哈密":   {42.8180, 93.5150},
-	"昌吉":   {44.0145, 87.3087},
-	"伊犁":   {43.9219, 81.3240},
-	"石河子":  {44.3056, 86.0809},
+// Weather 天气查询逻辑
+type Weather struct {
+	config global.WeatherAPIConfig
+	client *http.Client
 }
 
-// Weather 天气查询逻辑
-type Weather struct{}
-
-func NewWeather() *Weather {
-	return &Weather{}
+func NewWeather(cfg global.WeatherAPIConfig) *Weather {
+	return &Weather{
+		config: cfg,
+		client: &http.Client{
+			Timeout: cfg.Timeout,
+		},
+	}
 }
 
 func (w *Weather) Name() string {
@@ -217,28 +37,37 @@ func (w *Weather) Description() string {
 }
 
 func (w *Weather) Execute(ctx context.Context, input string) string {
-	// 解析城市和日期
+	log.Info(ctx, "Weather.Execute: 入参 input=%s", input)
+
+	// 解析城市和天数
 	city, days := parseWeatherInput(input)
 	if city == "" {
 		city = input
 		days = 1
 	}
 
-	// 查找城市坐标
-	coords, ok := cityCoords[city]
-	if !ok {
-		// 回退到 wttr.in
-		return getWeatherFromWttr(city, days)
+	log.Info(ctx, "Weather.Execute: 解析结果 city=%s, days=%d", city, days)
+
+	// 优先调用接口盒子API（中国气象局数据）
+	result, err := w.getWeatherFromAPIHZ(ctx, city, days)
+	if err == nil {
+		log.Info(ctx, "Weather.Execute: 接口盒子查询成功 city=%s", city)
+		return result
 	}
 
-	// 获取天气预报（使用 Open-Meteo）
-	weather, err := getWeatherFromOpenMeteo(coords[0], coords[1], days)
-	if err != nil {
-		// 如果 Open-Meteo 失败，回退到 wttr.in
-		return getWeatherFromWttr(city, days)
+	log.Error(ctx, "Weather.Execute: 接口盒子查询失败 city=%s, err=%v", city, err)
+
+	// 接口盒子失败，尝试高德天气API
+	result, err = w.getWeatherFromAmap(ctx, city, days)
+	if err == nil {
+		log.Info(ctx, "Weather.Execute: 高德API查询成功 city=%s", city)
+		return result
 	}
 
-	return city + "的" + weather
+	log.Error(ctx, "Weather.Execute: 高德API查询失败 city=%s, err=%v", city, err)
+
+	// 两个都失败
+	return fmt.Sprintf("查询「%s」天气失败：%s", city, err.Error())
 }
 
 // parseWeatherInput 解析输入，提取城市和天数
@@ -271,234 +100,327 @@ func parseWeatherInput(input string) (string, int) {
 	return city, days
 }
 
-// getWeatherFromOpenMeteo 使用 Open-Meteo API 获取天气
-func getWeatherFromOpenMeteo(lat, lon float64, days int) (string, error) {
-	if days > 16 {
-		days = 16
-	}
+// ==================== 接口盒子 API ====================
 
-	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=%d", lat, lon, days)
+// APIHZResponse 接口盒子API响应结构
+type APIHZResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
 
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
+	// 地区信息
+	Guo   string `json:"guo"`   // 国家
+	Sheng string `json:"sheng"` // 省份
+	Shi   string `json:"shi"`   // 城市
+	Name  string `json:"name"`  // 地点
 
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("请求失败")
-	}
+	// 今日天气
+	Weather1 string `json:"weather1"` // 白天天气
+	Weather2 string `json:"weather2"` // 夜间天气
+	WD1      string `json:"wd1"`      // 白天温度
+	WD2      string `json:"wd2"`      // 夜间温度
 
-	body, _ := io.ReadAll(resp.Body)
+	WindDirection1 string `json:"winddirection1"` // 白天风向
+	WindDirection2 string `json:"winddirection2"` // 夜间风向
+	WindLevel1     string `json:"windleve1"`      // 白天风力
+	WindLevel2     string `json:"windleve2"`      // 夜间风力
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return "", err
-	}
+	Lon    string `json:"lon"`    // 经度
+	Lat    string `json:"lat"`    // 纬度
+	Uptime string `json:"uptime"` // 更新时间
 
-	daily, ok := data["daily"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("数据格式错误")
-	}
+	// 实时天气
+	NowInfo struct {
+		Temperature interface{} `json:"temperature"` // 实时温度
+		Humidity    interface{} `json:"humidity"`    // 湿度
+		Pressure    interface{} `json:"pressure"`    // 气压
+		Feelst      interface{} `json:"feelst"`      // 体感温度
+	} `json:"nowinfo"`
 
-	dates := daily["time"].([]interface{})
-	weatherCodes := daily["weather_code"].([]interface{})
-	maxTemps := daily["temperature_2m_max"].([]interface{})
-	minTemps := daily["temperature_2m_min"].([]interface{})
-
-	result := "未来" + fmt.Sprintf("%d", len(dates)) + "天天气：\n"
-
-	for i := 0; i < len(dates); i++ {
-		date := dates[i].(string)
-		code := int(weatherCodes[i].(float64))
-		maxTemp := int(maxTemps[i].(float64))
-		minTemp := int(minTemps[i].(float64))
-
-		weatherDesc := getWeatherDescByCode(code)
-
-		dayStr := fmt.Sprintf("第%d天", i+1)
-		if i == 0 {
-			dayStr = "今天"
-		} else if i == 1 {
-			dayStr = "明天"
-		} else if i == 2 {
-			dayStr = "后天"
-		} else if len(date) >= 10 {
-			dayStr = date[5:10]
-		}
-
-		result += fmt.Sprintf("%s：%s，最高温度：%d°C，最低温度：%d°C\n", dayStr, weatherDesc, maxTemp, minTemp)
-	}
-
-	return strings.TrimSpace(result), nil
+	// 多天预报
+	WeatherDay2 *APIHZDayData `json:"weatherday2"`
+	WeatherDay3 *APIHZDayData `json:"weatherday3"`
+	WeatherDay4 *APIHZDayData `json:"weatherday4"`
+	WeatherDay5 *APIHZDayData `json:"weatherday5"`
+	WeatherDay6 *APIHZDayData `json:"weatherday6"`
+	WeatherDay7 *APIHZDayData `json:"weatherday7"`
 }
 
-// getWeatherFromWttr 回退到 wttr.in
-func getWeatherFromWttr(city string, days int) string {
-	url := "https://wttr.in/" + city + "?format=j1"
-	resp, err := http.Get(url)
+// APIHZDayData 多天天气数据
+type APIHZDayData struct {
+	Date     string      `json:"date"`
+	Weather1 string      `json:"weather1"`
+	WD1      interface{} `json:"wd1"`
+	WD2      interface{} `json:"wd2"`
+}
+
+// getWeatherFromAPIHZ 调用接口盒子API
+func (w *Weather) getWeatherFromAPIHZ(ctx context.Context, city string, days int) (string, error) {
+	params := url.Values{}
+	params.Set("id", w.config.ID)
+	params.Set("key", w.config.Key)
+	params.Set("place", city)
+	params.Set("day", fmt.Sprintf("%d", days))
+
+	requestURL := w.config.BaseURL + "?" + params.Encode()
+
+	resp, err := w.client.Get(requestURL)
 	if err != nil {
-		return "获取天气失败，请稍后重试"
+		log.Error(ctx, "Weather.getWeatherFromAPIHZ: 网络请求失败 city=%s, err=%v", city, err)
+		return "", fmt.Errorf("网络请求失败")
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return "获取天气失败，请稍后重试"
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error(ctx, "Weather.getWeatherFromAPIHZ: 读取响应失败 city=%s, err=%v", city, err)
+		return "", fmt.Errorf("读取响应失败")
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-
-	var data map[string]interface{}
+	var data APIHZResponse
 	if err := json.Unmarshal(body, &data); err != nil {
-		return "获取天气失败，请稍后重试"
+		log.Error(ctx, "Weather.getWeatherFromAPIHZ: 解析响应失败 city=%s, body=%s", city, string(body)[:minInt(100, len(body))])
+		return "", fmt.Errorf("解析响应失败: %s", string(body)[:minInt(100, len(body))])
 	}
 
-	weatherData, ok := data["weather"].([]interface{})
-	if !ok || len(weatherData) == 0 {
-		return "无法获取 " + city + " 的天气信息"
+	if data.Code != 200 {
+		log.Error(ctx, "Weather.getWeatherFromAPIHZ: API返回错误 city=%s, code=%d, msg=%s", city, data.Code, data.Msg)
+		return "", fmt.Errorf("%s", data.Msg)
 	}
 
+	return w.formatAPIHZResult(&data, days), nil
+}
+
+// formatAPIHZResult 格式化接口盒子结果
+func (w *Weather) formatAPIHZResult(data *APIHZResponse, days int) string {
+	var result strings.Builder
+
+	location := data.Name
+	if location == "" {
+		location = data.Shi
+	}
+	result.WriteString(fmt.Sprintf("%s未来%d天天气：\n", location, days))
+	result.WriteString(fmt.Sprintf("更新时间：%s\n", data.Uptime))
+
+	// 今日天气
+	result.WriteString(fmt.Sprintf("\n今天：%s，%s~%s°C", data.Weather1, data.WD1, data.WD2))
+	if data.WindDirection1 != "" && data.WindLevel1 != "" {
+		result.WriteString(fmt.Sprintf("，%s%s", data.WindDirection1, data.WindLevel1))
+	}
+	result.WriteString("\n")
+
+	// 实时天气
+	if data.NowInfo.Temperature != nil {
+		temp := toFloat64(data.NowInfo.Temperature)
+		humidity := toFloat64(data.NowInfo.Humidity)
+		if temp > 0 {
+			result.WriteString(fmt.Sprintf("实时：%.0f°C，湿度%.0f%%", temp, humidity))
+			if feelst := toFloat64(data.NowInfo.Feelst); feelst > 0 {
+				result.WriteString(fmt.Sprintf("，体感%.0f°C", feelst))
+			}
+			result.WriteString("\n")
+		}
+	}
+
+	// 多天预报
+	dayDataList := []*APIHZDayData{
+		data.WeatherDay2, data.WeatherDay3, data.WeatherDay4,
+		data.WeatherDay5, data.WeatherDay6, data.WeatherDay7,
+	}
+	dayNames := []string{"明天", "后天", "第4天", "第5天", "第6天", "第7天"}
+
+	for i, d := range dayDataList {
+		if i >= days-1 || d == nil {
+			break
+		}
+		if d.Weather1 != "" {
+			result.WriteString(fmt.Sprintf("%s：%s，%.0f~%.0f°C\n", dayNames[i], d.Weather1, toFloat64(d.WD1), toFloat64(d.WD2)))
+		}
+	}
+
+	return strings.TrimSpace(result.String())
+}
+
+// ==================== 高德天气 API ====================
+
+// AmapWeatherResponse 高德天气API响应
+type AmapWeatherResponse struct {
+	Status   string `json:"status"`
+	Count    string `json:"count"`
+	Info     string `json:"info"`
+	Infocode string `json:"infocode"`
+	Lives    []struct {
+		Province      string `json:"province"`
+		City          string `json:"city"`
+		Adcode        string `json:"adcode"`
+		Weather       string `json:"weather"`
+		Temperature   string `json:"temperature"`
+		WindDirection string `json:"winddirection"`
+		WindPower     string `json:"windpower"`
+		Humidity      string `json:"humidity"`
+		ReportTime    string `json:"reporttime"`
+	} `json:"lives"`
+	Forecasts []struct {
+		City       string `json:"city"`
+		Adcode     string `json:"adcode"`
+		Province   string `json:"province"`
+		ReportTime string `json:"reporttime"`
+		Casts      []struct {
+			Date         string `json:"date"`
+			Week         string `json:"week"`
+			DayWeather   string `json:"dayweather"`
+			NightWeather string `json:"nightweather"`
+			DayTemp      string `json:"daytemp"`
+			NightTemp    string `json:"nighttemp"`
+			DayWind      string `json:"daywind"`
+			NightWind    string `json:"nightwind"`
+			DayPower     string `json:"daypower"`
+			NightPower   string `json:"nightpower"`
+		} `json:"casts"`
+	} `json:"forecasts"`
+}
+
+// getWeatherFromAmap 调用高德天气API
+func (w *Weather) getWeatherFromAmap(ctx context.Context, city string, days int) (string, error) {
+	// 高德API需要adcode，尝试用城市名查找
+	adcode := getAdcodeByCity(city)
+	if adcode == "" {
+		log.Error(ctx, "Weather.getWeatherFromAmap: 未找到城市编码 city=%s", city)
+		return "", fmt.Errorf("未找到城市编码")
+	}
+
+	log.Info(ctx, "Weather.getWeatherFromAmap: 城市编码 city=%s, adcode=%s", city, adcode)
+
+	// 构建请求
+	params := url.Values{}
+	params.Set("key", "ed105e515b93def32b5db5b0b420e3e4")
+	params.Set("city", adcode)
 	if days > 1 {
-		actualDays := len(weatherData)
-		if days > actualDays {
-			days = actualDays
-		}
+		params.Set("extensions", "all")
+	}
 
-		result := city + "未来" + fmt.Sprintf("%d", days) + "天天气：\n"
+	requestURL := "https://restapi.amap.com/v3/weather/weatherInfo?" + params.Encode()
 
-		for i := 0; i < days; i++ {
-			day := weatherData[i].(map[string]interface{})
-			maxTemp := getStringValue(day, "maxtempC")
-			minTemp := getStringValue(day, "mintempC")
-			weatherDesc := getWeatherDesc(day)
+	resp, err := w.client.Get(requestURL)
+	if err != nil {
+		log.Error(ctx, "Weather.getWeatherFromAmap: 网络请求失败 city=%s, err=%v", city, err)
+		return "", fmt.Errorf("高德API网络请求失败")
+	}
+	defer resp.Body.Close()
 
-			dayStr := fmt.Sprintf("第%d天", i+1)
-			if i == 0 {
-				dayStr = "今天"
-			} else if i == 1 {
-				dayStr = "明天"
-			} else if i == 2 {
-				dayStr = "后天"
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error(ctx, "Weather.getWeatherFromAmap: 读取响应失败 city=%s, err=%v", city, err)
+		return "", fmt.Errorf("读取响应失败")
+	}
+
+	var data AmapWeatherResponse
+	if err := json.Unmarshal(body, &data); err != nil {
+		log.Error(ctx, "Weather.getWeatherFromAmap: 解析响应失败 city=%s, err=%v", city, err)
+		return "", fmt.Errorf("解析响应失败")
+	}
+
+	if data.Status != "1" {
+		log.Error(ctx, "Weather.getWeatherFromAmap: API返回错误 city=%s, status=%s, info=%s", city, data.Status, data.Info)
+		return "", fmt.Errorf("高德API返回错误: %s", data.Info)
+	}
+
+	return w.formatAmapResult(&data, city, days), nil
+}
+
+// formatAmapResult 格式化高德天气结果
+func (w *Weather) formatAmapResult(data *AmapWeatherResponse, city string, days int) string {
+	var result strings.Builder
+
+	// 实况天气
+	if len(data.Lives) > 0 {
+		live := data.Lives[0]
+		result.WriteString(fmt.Sprintf("%s今日天气：\n", live.City))
+		result.WriteString(fmt.Sprintf("天气：%s，温度：%s°C\n", live.Weather, live.Temperature))
+		result.WriteString(fmt.Sprintf("风向：%s，风力：%s级\n", live.WindDirection, live.WindPower))
+		result.WriteString(fmt.Sprintf("湿度：%s%%\n", live.Humidity))
+		result.WriteString(fmt.Sprintf("更新时间：%s", live.ReportTime))
+		return result.String()
+	}
+
+	// 预报天气
+	if len(data.Forecasts) > 0 && len(data.Forecasts[0].Casts) > 0 {
+		forecast := data.Forecasts[0]
+		result.WriteString(fmt.Sprintf("%s未来%d天天气：\n", forecast.City, minInt(days, len(forecast.Casts))))
+		result.WriteString(fmt.Sprintf("更新时间：%s\n", forecast.ReportTime))
+
+		dayNames := []string{"今天", "明天", "后天", "第4天", "第5天", "第6天"}
+		for i, cast := range forecast.Casts {
+			if i >= days {
+				break
 			}
-
-			result += fmt.Sprintf("%s：%s，最高温度：%s°C，最低温度：%s°C\n", dayStr, weatherDesc, maxTemp, minTemp)
-		}
-
-		return strings.TrimSpace(result)
-	}
-
-	// 单天天气
-	today := weatherData[0].(map[string]interface{})
-	maxTemp := getStringValue(today, "maxtempC")
-	minTemp := getStringValue(today, "mintempC")
-	weatherDesc := getWeatherDesc(today)
-
-	humidity := ""
-	wind := ""
-	current, ok := data["current_condition"].([]interface{})
-	if ok && len(current) > 0 {
-		condition := current[0].(map[string]interface{})
-		humidity = getStringValue(condition, "humidity")
-		wind = getStringValue(condition, "windspeedKmph")
-	}
-
-	result := city + "今日天气：" + weatherDesc + "，最高温度：" + maxTemp + "°C，最低温度：" + minTemp + "°C"
-	if humidity != "" {
-		result += "，湿度：" + humidity + "%"
-	}
-	if wind != "" {
-		result += "，风速：" + wind + "km/h"
-	}
-
-	return result
-}
-
-// getWeatherDescByCode 根据天气码获取天气描述
-func getWeatherDescByCode(code int) string {
-	codes := map[int]string{
-		0:  "晴天",
-		1:  "晴朗",
-		2:  "多云",
-		3:  "阴天",
-		45: "雾",
-		48: "雾",
-		51: "小雨",
-		53: "中雨",
-		55: "大雨",
-		61: "小雨",
-		63: "中雨",
-		65: "大雨",
-		71: "小雪",
-		73: "中雪",
-		75: "大雪",
-		77: "雪",
-		80: "小雨",
-		81: "中雨",
-		82: "大雨",
-		85: "小雪",
-		86: "大雪",
-		95: "雷暴",
-		96: "雷暴",
-		99: "雷暴",
-	}
-	if desc, ok := codes[code]; ok {
-		return desc
-	}
-	return fmt.Sprintf("天气%d", code)
-}
-
-// getWeatherDesc 获取天气描述（wttr.in）
-func getWeatherDesc(day map[string]interface{}) string {
-	hourly, ok := day["hourly"].([]interface{})
-	if ok && len(hourly) > 0 {
-		firstHour := hourly[0].(map[string]interface{})
-		if desc, ok := firstHour["weatherDesc"].([]interface{}); ok && len(desc) > 0 {
-			if v, ok := desc[0].(map[string]interface{})["value"].(string); ok {
-				return translateWeather(v)
+			dayName := cast.Date
+			if i < len(dayNames) {
+				dayName = dayNames[i]
 			}
+			result.WriteString(fmt.Sprintf("\n%s：%s，%s~%s°C", dayName, cast.DayWeather, cast.DayTemp, cast.NightTemp))
 		}
+		return result.String()
 	}
-	return "未知"
+
+	return fmt.Sprintf("%s暂无天气数据", city)
 }
 
-// getStringValue 安全获取字符串值
-func getStringValue(m map[string]interface{}, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
+// ==================== 辅助函数 ====================
+
+// toFloat64 将interface{}转换为float64
+func toFloat64(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		var f float64
+		fmt.Sscanf(val, "%f", &f)
+		return f
+	default:
+		return 0
 	}
-	if v, ok := m[key].(float64); ok {
-		return fmt.Sprintf("%.0f", v)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
 	}
+	return b
+}
+
+// getAdcodeByCity 城市名转adcode（常用城市）
+func getAdcodeByCity(city string) string {
+	// 省会及热门城市adcode映射
+	adcodeMap := map[string]string{
+		"北京": "110000", "上海": "310000", "广州": "440100", "深圳": "440300",
+		"西安": "610100", "成都": "510100", "杭州": "330100", "武汉": "420100",
+		"南京": "320100", "重庆": "500100", "天津": "120000", "苏州": "320500",
+		"郑州": "410100", "长沙": "430100", "青岛": "370200", "沈阳": "210100",
+		"大连": "210200", "厦门": "350200", "昆明": "530100", "哈尔滨": "230100",
+		"长春": "220100", "福州": "350100", "南昌": "360100", "贵阳": "520100",
+		"太原": "140100", "石家庄": "130100", "济南": "370100", "兰州": "620100",
+		"乌鲁木齐": "650100", "呼和浩特": "150100", "南宁": "450100", "海口": "460100",
+		"银川": "640100", "西宁": "630100", "拉萨": "540100",
+		// 简称
+		"京": "110000", "沪": "310000", "穗": "440100", "鹏": "440300",
+	}
+
+	if code, ok := adcodeMap[city]; ok {
+		return code
+	}
+
+	// 尝试模糊匹配
+	for name, code := range adcodeMap {
+		if strings.Contains(name, city) || strings.Contains(city, name) {
+			return code
+		}
+	}
+
 	return ""
-}
-
-// translateWeather 翻译天气描述
-func translateWeather(desc string) string {
-	desc = strings.TrimSpace(desc)
-
-	translations := map[string]string{
-		"Sunny":                "晴天",
-		"Clear":                "晴天",
-		"Partly cloudy":        "多云",
-		"Partly Cloudy":        "多云",
-		"Cloudy":               "阴天",
-		"Overcast":             "阴天",
-		"Light rain":           "小雨",
-		"Light rain shower":    "小雨",
-		"Moderate rain":        "中雨",
-		"Heavy rain":           "大雨",
-		"Rain":                 "雨天",
-		"Patchy rain possible": "可能有小雨",
-		"Snow":                 "雪天",
-		"Light snow":           "小雪",
-		"Fog":                  "雾",
-		"Foggy":                "雾",
-		"Mist":                 "薄雾",
-		"Thunderstorm":         "雷暴",
-		"Thunder":              "雷暴",
-	}
-	if t, ok := translations[desc]; ok {
-		return t
-	}
-	return desc
 }

@@ -41,3 +41,12 @@ func (m *ToolManager) GetToolsDesc() string {
 	}
 	return desc
 }
+
+// GetToolList 获取所有工具
+func (m *ToolManager) GetToolList() []Tool {
+	tools := make([]Tool, 0, len(m.tools))
+	for _, t := range m.tools {
+		tools = append(tools, t)
+	}
+	return tools
+}

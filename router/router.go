@@ -12,14 +12,16 @@ type Router struct {
 	chatCtrl   *controllers.ChatController
 	healthCtrl *controllers.HealthController
 	fileCtrl   *controllers.FileUploadController
+	internal   *InternalRouter
 }
 
 // NewRouter 创建路由
-func NewRouter(chatCtrl *controllers.ChatController) *Router {
+func NewRouter(chatCtrl *controllers.ChatController, toolCtrl *controllers.ToolController) *Router {
 	return &Router{
 		chatCtrl:   chatCtrl,
 		healthCtrl: controllers.NewHealthController(),
 		fileCtrl:   controllers.NewFileUploadController(),
+		internal:   NewInternalRouter(toolCtrl),
 	}
 }
 
@@ -28,14 +30,11 @@ func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 	// 静态文件
 	mux.Handle("/", http.FileServer(http.Dir("./static")))
 
-	// API 路由
-	mux.HandleFunc("/api/chat", r.handleChat)
-	mux.HandleFunc("/api/health", r.handleHealth)
+	// 前端 API（/api/*）
+	RegisterAPIRoutes(mux, r)
 
-	// 文件上传相关路由
-	mux.HandleFunc("/api/upload", r.handleUpload)
-	mux.HandleFunc("/api/files", r.handleListFiles)
-	mux.HandleFunc("/api/file/delete", r.handleDeleteFile)
+	// 后端内部接口（/internal/*）
+	RegisterInternalRoutes(mux, r.internal)
 }
 
 // handleChat 处理聊天请求

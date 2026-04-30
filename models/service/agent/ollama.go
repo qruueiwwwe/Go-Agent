@@ -12,14 +12,16 @@ import (
 
 // OllamaService Ollama 服务
 type OllamaService struct {
-	client    *api.Client
-	modelName string
+	client      *api.Client
+	modelName   string
+	temperature float64
 }
 
-func NewOllamaService(client *api.Client, modelName string) *OllamaService {
+func NewOllamaService(client *api.Client, modelName string, temperature float64) *OllamaService {
 	return &OllamaService{
-		client:    client,
-		modelName: modelName,
+		client:      client,
+		modelName:   modelName,
+		temperature: temperature,
 	}
 }
 
