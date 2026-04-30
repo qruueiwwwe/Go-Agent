@@ -2,7 +2,7 @@
    MessageList.js - 消息列表组件
    ============================================ */
 
-const { defineComponent, h, nextTick, ref } = Vue;
+const { defineComponent, h, nextTick, ref, watch } = Vue;
 import { MessageItem } from './MessageItem.js';
 
 /**
@@ -11,15 +11,12 @@ import { MessageItem } from './MessageItem.js';
  * Props:
  *   - messages: Array 消息数组
  *   - loading: Boolean 是否加载中
+ *   - showTimestamp: Boolean 是否显示时间戳
  * 
  * Events:
  *   - message-click: 消息被点击
- * 
- * Features:
- *   - 自动滚动到最新消息
- *   - 空状态显示
- *   - 加载动画
- *   - 预留虚拟滚动空间
+ *   - regenerate: 重新生成消息
+ *   - delete: 删除消息
  */
 export const MessageList = defineComponent({
     name: 'MessageList',
@@ -31,148 +28,139 @@ export const MessageList = defineComponent({
     props: {
         messages: {
             type: Array,
-            default: () => [],
-            validator: (arr) => Array.isArray(arr)
+            default: () => []
         },
         loading: {
             type: Boolean,
             default: false
+        },
+        showTimestamp: {
+            type: Boolean,
+            default: true
         }
     },
     
     data() {
         return {
-            containerRef: ref(null),
             autoScroll: true
         };
     },
     
     watch: {
-        /**
-         * 监听消息变化，自动滚动到底部
-         */
         messages: {
-            handler(newMessages) {
-                this.$nextTick(() => {
-                    this.scrollToBottom();
-                });
+            handler() {
+                if (this.autoScroll) {
+                    this.$nextTick(() => this.scrollToBottom());
+                }
             },
-            deep: false
+            deep: true
         },
         
-        /**
-         * 监听加载状态变化
-         */
         loading(newVal) {
-            if (!newVal) {
-                this.$nextTick(() => {
-                    this.scrollToBottom();
-                });
+            if (!newVal && this.autoScroll) {
+                this.$nextTick(() => this.scrollToBottom());
             }
         }
     },
     
     mounted() {
-        // 初始滚动到底部
-        this.$nextTick(() => {
-            this.scrollToBottom();
-        });
+        this.scrollToBottom();
         
-        // 监听容器滚动，判断是否需要自动滚动
-        this.$refs.messagesContainer?.addEventListener('scroll', () => {
-            this.handleScroll();
-        });
+        const container = this.$refs.messagesContainer;
+        if (container) {
+            container.addEventListener('scroll', this.handleScroll);
+        }
     },
     
     beforeUnmount() {
-        this.$refs.messagesContainer?.removeEventListener('scroll', () => {
-            this.handleScroll();
-        });
+        const container = this.$refs.messagesContainer;
+        if (container) {
+            container.removeEventListener('scroll', this.handleScroll);
+        }
     },
     
     methods: {
-        /**
-         * 滚动到底部
-         */
         scrollToBottom() {
-            if (!this.$refs.messagesContainer) return;
-            
             nextTick(() => {
                 const container = this.$refs.messagesContainer;
-                container.scrollTop = container.scrollHeight;
+                if (container) {
+                    container.scrollTo({
+                        top: container.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
             });
         },
         
-        /**
-         * 处理容器滚动
-         */
         handleScroll() {
             const container = this.$refs.messagesContainer;
             if (!container) return;
             
-            // 判断是否在底部（留 100px 缓冲区）
-            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+            const threshold = 100;
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
             this.autoScroll = isAtBottom;
         },
         
-        /**
-         * 处理消息点击事件
-         */
-        handleMessageClick(message) {
-            this.$emit('message-click', message);
+        handleRegenerate(message) {
+            this.$emit('regenerate', message);
         },
         
-        /**
-         * 渲染空状态
-         */
+        handleDelete(message) {
+            this.$emit('delete', message);
+        },
+        
         renderEmptyState() {
-            return h('div', { class: 'empty-state' }, [
-                h('div', { class: 'empty-state-icon' }, '💬'),
-                h('div', { class: 'empty-state-text' }, '还没有消息，开始聊天吧！')
+            return h('div', { class: 'empty-state animate-fadeIn' }, [
+                h('div', { class: 'empty-state-icon' }, [
+                    h('span', { class: 'empty-state-emoji' }, '💬')
+                ]),
+                h('div', { class: 'empty-state-content' }, [
+                    h('h3', { class: 'empty-state-title' }, '开始对话'),
+                    h('p', { class: 'empty-state-desc' }, '输入消息开始与 AI 助手交流')
+                ])
             ]);
         },
         
-        /**
-         * 渲染加载状态
-         */
         renderLoading() {
             if (!this.loading) return null;
             
-            return h('div', { class: 'loading active' }, '正在思考中...');
+            return h('div', { class: 'message assistant' }, [
+                h('div', { class: 'message-content loading-content' }, [
+                    h('div', { class: 'loading-wave' }, [
+                        h('span'),
+                        h('span'),
+                        h('span'),
+                        h('span'),
+                        h('span')
+                    ])
+                ])
+            ]);
         },
         
-        /**
-         * 渲染消息列表
-         */
         renderMessages() {
-            if (this.messages.length === 0 && !this.loading) {
-                return this.renderEmptyState();
-            }
+            const items = this.messages.map(msg => 
+                h(MessageItem, {
+                    key: msg.id,
+                    message: msg,
+                    showTimestamp: this.showTimestamp,
+                    onRegenerate: this.handleRegenerate,
+                    onDelete: this.handleDelete
+                })
+            );
             
-            return [
-                ...this.messages.map(msg => 
-                    h(MessageItem, {
-                        key: msg.id,
-                        message: msg,
-                        onMessageClick: (data) => {
-                            this.$emit('message-click', data);
-                        }
-                    })
-                ),
-                this.renderLoading()
-            ];
+            items.push(this.renderLoading());
+            
+            return items;
         }
     },
     
     render() {
-        return h(
-            'div',
-            {
-                ref: 'messagesContainer',
-                class: 'messages-container'
-            },
-            this.renderMessages()
-        );
+        const hasMessages = this.messages.length > 0;
+        
+        return h('div', {
+            ref: 'messagesContainer',
+            class: 'messages-container'
+        }, hasMessages ? this.renderMessages() : this.renderEmptyState());
     }
 });
 

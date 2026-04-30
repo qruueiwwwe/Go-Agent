@@ -2,23 +2,22 @@
    MessageItem.js - 单条消息组件
    ============================================ */
 
-const { defineComponent, h } = Vue;
+const { defineComponent, h, ref, onMounted, nextTick } = Vue;
+import { renderMarkdown, addCopyButtons, processLinks } from '../markdown.js';
+import { formatTime, copyToClipboard } from '../utils.js';
+import Toast from './Toast.js';
 
 /**
  * MessageItem 组件 - 显示单条消息
  * 
  * Props:
- *   - message: {id, type, content} 消息数据
- *   - type: string 消息类型 (user/assistant/error/system)
- *   - content: string 消息内容
+ *   - message: {id, type, content, timestamp} 消息数据
+ *   - showTimestamp: Boolean 是否显示时间戳
  * 
- * Events: 无
- * 
- * 消息类型说明:
- *   - user: 用户消息（蓝色背景）
- *   - assistant: 助手消息（灰色背景）
- *   - error: 错误消息（红色背景）
- *   - system: 系统消息（蓝色背景，居中）
+ * Events:
+ *   - copy: 复制消息
+ *   - regenerate: 重新生成
+ *   - delete: 删除消息
  */
 export const MessageItem = defineComponent({
     name: 'MessageItem',
@@ -28,74 +27,171 @@ export const MessageItem = defineComponent({
             type: Object,
             required: true,
             validator: (msg) => msg.id && msg.type && (msg.content || msg.content === '')
+        },
+        showTimestamp: {
+            type: Boolean,
+            default: true
         }
     },
     
+    data() {
+        return {
+            showActions: false,
+            copied: false
+        };
+    },
+    
     computed: {
-        /**
-         * 消息的 CSS 类名
-         */
         messageClass() {
             return ['message', this.message.type];
         },
         
+        formattedTime() {
+            if (!this.message.timestamp) return '';
+            return formatTime(new Date(this.message.timestamp), 'HH:mm');
+        },
+        
         /**
-         * 消息内容类
+         * 是否显示操作按钮（仅助手消息）
          */
-        contentClass() {
-            return ['message-content'];
+        canShowActions() {
+            return this.message.type === 'assistant' || this.message.type === 'user';
         }
     },
     
     methods: {
         /**
-         * 处理消息点击（预留用于复制等功能）
+         * 复制消息内容
          */
-        handleClick(e) {
-            // 可以在这里实现消息复制、编辑等功能
-            this.$emit('message-click', {
-                message: this.message,
-                event: e
+        async handleCopy() {
+            try {
+                await copyToClipboard(this.message.content);
+                this.copied = true;
+                Toast.success('已复制到剪贴板');
+                setTimeout(() => {
+                    this.copied = false;
+                }, 2000);
+            } catch (e) {
+                Toast.error('复制失败');
+            }
+        },
+        
+        /**
+         * 重新生成回复
+         */
+        handleRegenerate() {
+            this.$emit('regenerate', this.message);
+        },
+        
+        /**
+         * 删除消息
+         */
+        handleDelete() {
+            this.$emit('delete', this.message);
+        },
+        
+        /**
+         * 渲染 Markdown 内容
+         */
+        renderMarkdownContent() {
+            const { content, type } = this.message;
+            
+            // 用户消息：不渲染 Markdown，保留换行
+            if (type === 'user') {
+                return h('div', { class: 'message-text' }, 
+                    content.split('\n').map((line, i, arr) => 
+                        i < arr.length - 1 
+                            ? [line, h('br')]
+                            : line
+                    ).flat()
+                );
+            }
+            
+            // 错误消息：简单显示
+            if (type === 'error') {
+                return h('div', { class: 'message-text' }, content);
+            }
+            
+            // 系统消息：简单显示
+            if (type === 'system') {
+                return h('div', { class: 'message-text' }, content);
+            }
+            
+            // 助手消息：渲染 Markdown
+            const html = renderMarkdown(content);
+            return h('div', {
+                class: 'message-text markdown-body',
+                innerHTML: html,
+                ref: 'contentRef'
             });
         },
         
         /**
-         * 渲染消息内容（支持换行）
+         * 渲染时间戳
          */
-        renderContent() {
-            const { content, type } = this.message;
+        renderTimestamp() {
+            if (!this.showTimestamp || !this.formattedTime) return null;
             
-            // 如果是代码块或包含特殊格式，可以在这里处理
-            // 例如：Markdown 渲染、代码高亮等（后续扩展）
+            return h('div', { class: 'message-timestamp' }, this.formattedTime);
+        },
+        
+        /**
+         * 渲染操作按钮
+         */
+        renderActions() {
+            if (!this.canShowActions) return null;
             
-            if (type === 'assistant' && content.includes('\n')) {
-                // 保留换行符格式
-                return content.split('\n').map((line, index) => [
-                    h('span', line),
-                    index < content.split('\n').length - 1 ? h('br') : null
-                ]).flat().filter(Boolean);
+            const actions = [];
+            
+            // 复制按钮
+            actions.push(h('button', {
+                class: ['message-action-btn', this.copied && 'copied'],
+                onClick: this.handleCopy,
+                title: '复制'
+            }, this.copied ? '已复制' : '复制'));
+            
+            // 重新生成按钮（仅助手消息）
+            if (this.message.type === 'assistant') {
+                actions.push(h('button', {
+                    class: 'message-action-btn',
+                    onClick: this.handleRegenerate,
+                    title: '重新生成'
+                }, '重新生成'));
             }
             
-            return content;
+            return h('div', { class: 'message-actions' }, actions);
         }
     },
     
+    mounted() {
+        // 为代码块添加复制按钮
+        nextTick(() => {
+            if (this.$refs.contentRef && this.message.type === 'assistant') {
+                addCopyButtons(this.$refs.contentRef);
+                processLinks(this.$refs.contentRef);
+            }
+        });
+    },
+    
     render() {
-        return h(
-            'div',
-            {
-                class: this.messageClass,
-                key: this.message.id
-            },
-            h(
-                'div',
-                {
-                    class: this.contentClass,
-                    onClick: this.handleClick
-                },
-                this.renderContent()
-            )
-        );
+        const children = [
+            this.renderMarkdownContent(),
+            this.renderTimestamp()
+        ];
+        
+        // 添加操作按钮（悬浮显示）
+        if (this.canShowActions) {
+            children.push(this.renderActions());
+        }
+        
+        return h('div', {
+            class: this.messageClass,
+            key: this.message.id,
+            onMouseenter: () => { this.showActions = true; },
+            onMouseleave: () => { this.showActions = false; }
+        }, [
+            h('div', { class: 'message-content' }, children)
+        ]);
     }
 });
 

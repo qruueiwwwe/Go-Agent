@@ -13,26 +13,16 @@
     <link rel="stylesheet" href="/css/theme.css">
     <link rel="stylesheet" href="/css/common.css">
     <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/animations.css">
     
     <style>
-        /* 应用容器适应屏幕 */
-        html, body {
+        /* 全屏应用布局 */
+        html, body, #app {
             width: 100%;
             height: 100%;
-        }
-        
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        
-        @media (max-width: 1000px) {
-            body {
-                padding: 0;
-            }
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -42,6 +32,16 @@
     
     <!-- Vue 3 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
+    
+    <!-- Markdown 渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- 代码高亮 -->
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" id="hljs-theme">
+    
+    <!-- XSS 防护 -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     
     <!-- 应用入口 -->
     <script type="module">

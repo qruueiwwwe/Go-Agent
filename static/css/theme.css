@@ -123,16 +123,58 @@
     --z-notification: 1200;
 }
 
-/* 深色模式（可选） */
+/* 深色模式 */
+[data-theme="dark"] {
+    --text-primary: #f0f0f0;
+    --text-secondary: #d0d0d0;
+    --text-tertiary: #a0a0a0;
+    --text-disabled: #666666;
+    
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #252525;
+    --bg-tertiary: #2d2d2d;
+    --bg-overlay: rgba(0, 0, 0, 0.7);
+    
+    --border-color: #333333;
+    --border-color-dark: #444444;
+    
+    --color-gray-50: #1a1a1a;
+    --color-gray-100: #252525;
+    --color-gray-200: #2d2d2d;
+    --color-gray-300: #404040;
+    --color-gray-400: #555555;
+    --color-gray-500: #707070;
+    --color-gray-600: #909090;
+    --color-gray-700: #b0b0b0;
+    --color-gray-800: #d0d0d0;
+    
+    --color-primary-light: #2a3a5a;
+    --color-secondary-light: #3a2a4a;
+    --color-success-light: #1a3a1a;
+    --color-error-light: #3a1a1a;
+    --color-warning-light: #3a2a1a;
+    --color-info-light: #1a2a3a;
+    
+    /* 暗色模式阴影调整 */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-base: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 10px 15px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 20px 25px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 25px 50px rgba(0, 0, 0, 0.6);
+}
+
+/* 系统主题跟随 */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
         --text-primary: #f0f0f0;
         --text-secondary: #d0d0d0;
         --text-tertiary: #a0a0a0;
+        --text-disabled: #666666;
         
         --bg-primary: #1a1a1a;
-        --bg-secondary: #2a2a2a;
-        --bg-tertiary: #333333;
+        --bg-secondary: #252525;
+        --bg-tertiary: #2d2d2d;
         
         --border-color: #333333;
         --border-color-dark: #444444;
@@ -198,3 +240,50 @@
 .rounded-lg { border-radius: var(--radius-lg); }
 .rounded-xl { border-radius: var(--radius-xl); }
 .rounded-full { border-radius: var(--radius-full); }
+
+/* ===== 玻璃态效果 ===== */
+
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ===== 动态渐变背景 ===== */
+
+.gradient-animated {
+    background: linear-gradient(-45deg, #667eea, #764ba2, #6B8DD6, #8E37D7);
+    background-size: 400% 400%;
+    animation: gradientFlow 15s ease infinite;
+}
+
+.gradient-mesh {
+    background: 
+        radial-gradient(at 40% 20%, hsla(228, 83%, 70%, 0.3) 0px, transparent 50%),
+        radial-gradient(at 80% 0%, hsla(189, 100%, 56%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 0% 50%, hsla(355, 100%, 70%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 80% 50%, hsla(340, 100%, 70%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 0% 100%, hsla(22, 100%, 70%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 80% 100%, hsla(242, 100%, 70%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 0% 0%, hsla(343, 100%, 70%, 0.2) 0px, transparent 50%);
+}
+
+/* ===== 主题过渡 ===== */
+
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+    transition: background-color 0.3s ease, 
+                color 0.3s ease, 
+                border-color 0.3s ease,
+                box-shadow 0.3s ease !important;
+}

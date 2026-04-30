@@ -249,3 +249,134 @@ export function isSupported(api) {
     
     return apis[api] !== undefined ? apis[api] : false;
 }
+
+/* ============================================
+   主题管理系统
+   ============================================ */
+
+const THEME_KEY = 'app-theme';
+const THEME_LIGHT = 'light';
+const THEME_DARK = 'dark';
+const THEME_SYSTEM = 'system';
+
+/**
+ * 主题管理器
+ */
+export const ThemeManager = {
+    current: THEME_SYSTEM,
+    listeners: [],
+    
+    /**
+     * 初始化主题
+     */
+    init() {
+        // 从 localStorage 读取保存的主题
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved && [THEME_LIGHT, THEME_DARK, THEME_SYSTEM].includes(saved)) {
+            this.current = saved;
+        }
+        
+        // 应用主题
+        this.apply();
+        
+        // 监听系统主题变化
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (this.current === THEME_SYSTEM) {
+                    this.apply();
+                }
+            });
+        }
+    },
+    
+    /**
+     * 获取实际主题（解析 system）
+     */
+    getResolvedTheme() {
+        if (this.current === THEME_SYSTEM) {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                return THEME_DARK;
+            }
+            return THEME_LIGHT;
+        }
+        return this.current;
+    },
+    
+    /**
+     * 应用主题
+     */
+    apply() {
+        const theme = this.getResolvedTheme();
+        const root = document.documentElement;
+        
+        // 添加过渡类
+        root.classList.add('theme-transition');
+        
+        // 设置主题属性
+        root.setAttribute('data-theme', theme);
+        
+        // 更新 meta theme-color
+        const metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) {
+            metaTheme.content = theme === THEME_DARK ? '#1a1a1a' : '#667eea';
+        }
+        
+        // 移除过渡类
+        setTimeout(() => {
+            root.classList.remove('theme-transition');
+        }, 300);
+        
+        // 通知监听器
+        this.listeners.forEach(fn => fn(theme));
+    },
+    
+    /**
+     * 设置主题
+     * @param {string} theme - 主题名称：light | dark | system
+     */
+    set(theme) {
+        if (![THEME_LIGHT, THEME_DARK, THEME_SYSTEM].includes(theme)) {
+            console.error('Invalid theme:', theme);
+            return;
+        }
+        
+        this.current = theme;
+        localStorage.setItem(THEME_KEY, theme);
+        this.apply();
+    },
+    
+    /**
+     * 切换主题（light <-> dark）
+     */
+    toggle() {
+        const resolved = this.getResolvedTheme();
+        this.set(resolved === THEME_DARK ? THEME_LIGHT : THEME_DARK);
+    },
+    
+    /**
+     * 是否为暗色主题
+     */
+    isDark() {
+        return this.getResolvedTheme() === THEME_DARK;
+    },
+    
+    /**
+     * 监听主题变化
+     * @param {Function} callback - 回调函数
+     */
+    onChange(callback) {
+        this.listeners.push(callback);
+        return () => {
+            this.listeners = this.listeners.filter(fn => fn !== callback);
+        };
+    }
+};
+
+// 自动初始化
+if (typeof window !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => ThemeManager.init());
+    } else {
+        ThemeManager.init();
+    }
+}
