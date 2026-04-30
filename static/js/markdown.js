@@ -78,7 +78,9 @@ export function renderMarkdown(text) {
     }
     
     try {
-        let html = marked.parse(text);
+        // 转义波浪号 ~，防止被解析为删除线（如温度 28~12°C）
+        const escapedText = text.replace(/~/g, '\\~');
+        let html = marked.parse(escapedText);
         
         // XSS 防护（如果 DOMPurify 可用）
         if (DOMPurify) {
