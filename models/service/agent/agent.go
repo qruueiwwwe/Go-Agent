@@ -171,28 +171,21 @@ func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, 
 
 	// ========== 缩写词猜测工具检测 ==========
 	// 检测用户是否在问缩写词含义
-	if strings.Contains(userMessage, "是什么意思") || strings.Contains(userMessage, "意思") ||
-		strings.Contains(userMessage, "含义") || strings.Contains(userMessage, "指的是") {
-		// 检测大模型是否返回了类似缩写词解释的格式但没有调用工具
-		// 例如：【xxx】可能的含义：1. xxx
-		if strings.Contains(resp, "可能的含义") || strings.Contains(resp, "含义：") ||
-			strings.Contains(resp, "意思是") || strings.Contains(resp, "指的是") {
-			// 提取缩写词
-			abbr := extractAbbreviation(userMessage)
-			if abbr != "" {
-				return "nbnhhsh", abbr, true
-			}
+	if strings.Contains(userMessage, "是什么意思") || strings.Contains(userMessage, "是什么") ||
+		strings.Contains(userMessage, "含义") || strings.Contains(userMessage, "指的是") ||
+		strings.Contains(userMessage, "缩写") {
+		// 提取缩写词，强制调用 nbnhhsh 工具查询
+		abbr := extractAbbreviation(userMessage)
+		if abbr != "" {
+			return "nbnhhsh", abbr, true
 		}
 	}
 
 	// 检测纯字母/数字组合（可能是缩写词）
 	abbr := extractAbbreviation(userMessage)
 	if abbr != "" && len(abbr) <= 10 {
-		// 如果大模型返回了类似解释但没有调用工具
-		if strings.Contains(resp, "可能的含义") || strings.Contains(resp, "含义：") ||
-			strings.Contains(resp, "意思是") || (strings.Contains(resp, "【") && strings.Contains(resp, "】")) {
-			return "nbnhhsh", abbr, true
-		}
+		// 大模型直接回答了但没有调用工具，强制使用 nbnhhsh 获取准确结果
+		return "nbnhhsh", abbr, true
 	}
 
 	return "", "", false

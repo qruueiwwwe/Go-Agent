@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -181,18 +182,23 @@ func main() {
 	mux := http.NewServeMux()
 	r.RegisterRoutes(mux)
 
-	log.Info(ctx, "服务启动成功，监听端口 %s", cfg.Server.Port)
-	fmt.Println("=== Agent 服务已启动 ===")
-	fmt.Printf("Version: %s\n", Version)
-	fmt.Println("前端地址：http://localhost:" + cfg.Server.Port)
-	fmt.Println("API 地址：http://localhost:" + cfg.Server.Port + "/api/chat")
-
 	// 优雅退出
 	go func() {
-		if err := http.ListenAndServe(":"+cfg.Server.Port, mux); err != nil && err != http.ErrServerClosed {
+		addr := "0.0.0.0:" + cfg.Server.Port // 监听所有网络接口
+		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
 			log.Error(ctx, "服务启动失败: %v", err)
 		}
 	}()
+
+	log.Info(ctx, "服务启动成功，监听端口 %s", cfg.Server.Port)
+	fmt.Println("=== Agent 服务已启动 ===")
+	fmt.Printf("Version: %s\n", Version)
+	fmt.Println("本地地址：http://localhost:" + cfg.Server.Port)
+	// 获取本机IP
+	if localIP := getLocalIP(); localIP != "" {
+		fmt.Println("局域网地址：http://" + localIP + ":" + cfg.Server.Port)
+		fmt.Println("API 地址：http://" + localIP + ":" + cfg.Server.Port + "/api/chat")
+	}
 
 	// 等待退出信号
 	quit := make(chan os.Signal, 1)
@@ -201,4 +207,20 @@ func main() {
 
 	log.Info(ctx, "收到退出信号，正在关闭服务...")
 	os.Exit(0)
+}
+
+// getLocalIP 获取本机局域网IP地址
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
 }
