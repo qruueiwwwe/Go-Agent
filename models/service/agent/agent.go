@@ -12,12 +12,13 @@ import (
 // AgentService Agent 服务
 type AgentService struct {
 	ollamaSvc    *OllamaService
+	zhipuSvc     *ZhipuService
 	toolManager  *ToolManager
 	systemPrompt string
 }
 
 // NewAgentService 创建 Agent 服务
-func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentService {
+func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManager *ToolManager) *AgentService {
 	systemPrompt := `
 你是一个智能助手，能使用工具。
 你有以下工具：
@@ -48,6 +49,7 @@ func NewAgentService(ollamaSvc *OllamaService, toolManager *ToolManager) *AgentS
 `
 	return &AgentService{
 		ollamaSvc:    ollamaSvc,
+		zhipuSvc:     zhipuSvc,
 		toolManager:  toolManager,
 		systemPrompt: systemPrompt,
 	}
@@ -73,8 +75,20 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 	// 调用大模型
 	resp, err := s.ollamaSvc.Chat(ctx, msgs)
 	if err != nil {
-		log.Error(ctx, "调用大模型失败: %v", err)
-		return "服务暂时不可用，请稍后重试"
+		log.Warn(ctx, "Ollama调用失败: %v，尝试智谱后备", err)
+
+		// 尝试智谱后备
+		if s.zhipuSvc != nil {
+			resp, err = s.zhipuSvc.Chat(ctx, convertToZhipuMessages(msgs))
+			if err != nil {
+				log.Error(ctx, "智谱后备也失败: %v", err)
+				return "服务暂时不可用，请稍后重试"
+			}
+			log.Info(ctx, "智谱后备响应成功")
+		} else {
+			log.Error(ctx, "智谱后备未配置")
+			return "服务暂时不可用，请稍后重试"
+		}
 	}
 
 	log.Info(ctx, "大模型响应: %s", resp)
@@ -367,4 +381,16 @@ func extractFileName(userMessage string) string {
 	}
 
 	return ""
+}
+
+// convertToZhipuMessages 将Ollama消息格式转换为智谱消息格式
+func convertToZhipuMessages(msgs []api.Message) []zhipuMessage {
+	result := make([]zhipuMessage, len(msgs))
+	for i, msg := range msgs {
+		result[i] = zhipuMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+	return result
 }

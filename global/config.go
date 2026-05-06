@@ -12,6 +12,7 @@ type Config struct {
 	Database   DatabaseConfig
 	Redis      RedisConfig
 	WeatherAPI WeatherAPIConfig
+	Zhipu      ZhipuConfig
 }
 
 // ServerConfig 服务配置
@@ -62,10 +63,21 @@ type RedisConfig struct {
 
 // WeatherAPIConfig 天气API配置
 type WeatherAPIConfig struct {
-	ID      string        // 开发者ID
-	Key     string        // 开发者KEY
+	ID      string        // 接口盒子开发者ID
+	Key     string        // 接口盒子开发者KEY
+	AmapKey string        // 高德天气API Key
 	BaseURL string        // API地址
 	Timeout time.Duration // 超时时间
+}
+
+// ZhipuConfig 智谱清言配置
+type ZhipuConfig struct {
+	APIKey      string        // API密钥（从环境变量读取）
+	Model       string        // 模型名称
+	BaseURL     string        // API地址
+	Timeout     time.Duration // 超时时间
+	Temperature float64       // 温度参数
+	Enable      bool          // 是否启用后备
 }
 
 // DefaultConfig 默认配置
@@ -94,7 +106,7 @@ var DefaultConfig = Config{
 		Host:     "localhost",
 		Port:     3306,
 		User:     "root",
-		Password: "12345678",
+		Password: "", // 从环境变量 DATABASE_PASSWORD 读取
 		DBName:   "goagent",
 		MaxOpen:  10,
 		MaxIdle:  5,
@@ -107,9 +119,18 @@ var DefaultConfig = Config{
 		PoolSize: 10,
 	},
 	WeatherAPI: WeatherAPIConfig{
-		ID:      "10016155",
-		Key:     "8b0464361cb05f30e401c0a1b9ac58ce",
+		ID:      "", // 从环境变量 WEATHER_API_ID 读取
+		Key:     "", // 从环境变量 WEATHER_API_KEY 读取
+		AmapKey: "", // 从环境变量 AMAP_API_KEY 读取
 		BaseURL: "https://cn.apihz.cn/api/tianqi/tqyb.php",
 		Timeout: 10 * time.Second,
+	},
+	Zhipu: ZhipuConfig{
+		APIKey:      "", // 从环境变量 ZHIPU_API_KEY 读取
+		Model:       "glm-4-flash",
+		BaseURL:     "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+		Timeout:     60 * time.Second,
+		Temperature: 0.3,
+		Enable:      true,
 	},
 }

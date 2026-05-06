@@ -292,7 +292,7 @@ func (w *Weather) getWeatherFromAmap(ctx context.Context, city string, days int)
 
 	// 构建请求
 	params := url.Values{}
-	params.Set("key", "ed105e515b93def32b5db5b0b420e3e4")
+	params.Set("key", w.config.AmapKey)
 	params.Set("city", adcode)
 	if days > 1 {
 		params.Set("extensions", "all")

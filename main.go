@@ -18,6 +18,7 @@ import (
 	"agent/router"
 	"agent/webapi/controllers"
 
+	"github.com/joho/godotenv"
 	"github.com/ollama/ollama/api"
 )
 
@@ -29,6 +30,11 @@ var (
 )
 
 func main() {
+	// 加载 .env 文件（如果存在）
+	if err := godotenv.Load(); err != nil {
+		log.InfoOld(".env 文件不存在，使用系统环境变量")
+	}
+
 	// 显示版本信息
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Printf("Agent Version: %s\n", Version)
@@ -45,6 +51,20 @@ func main() {
 	// 加载配置
 	cfg := global.DefaultConfig
 	cfg.Server.Port = "25565"
+
+	// 从环境变量覆盖敏感配置
+	if weatherID := os.Getenv("WEATHER_API_ID"); weatherID != "" {
+		cfg.WeatherAPI.ID = weatherID
+	}
+	if weatherKey := os.Getenv("WEATHER_API_KEY"); weatherKey != "" {
+		cfg.WeatherAPI.Key = weatherKey
+	}
+	if amapKey := os.Getenv("AMAP_API_KEY"); amapKey != "" {
+		cfg.WeatherAPI.AmapKey = amapKey
+	}
+	if dbPassword := os.Getenv("DATABASE_PASSWORD"); dbPassword != "" {
+		cfg.Database.Password = dbPassword
+	}
 
 	// 初始化日志
 	log.Init(cfg.Log)
@@ -63,6 +83,18 @@ func main() {
 	// 初始化 Ollama 服务
 	ollamaSvc := agent.NewOllamaService(client, cfg.Ollama.Model, cfg.Ollama.Temperature)
 	log.Info(ctx, "Ollama 服务初始化成功")
+
+	// 初始化智谱清言后备服务
+	var zhipuSvc *agent.ZhipuService
+	zhipuAPIKey := os.Getenv("ZHIPU_API_KEY")
+	if zhipuAPIKey != "" && cfg.Zhipu.Enable {
+		zhipuCfg := cfg.Zhipu
+		zhipuCfg.APIKey = zhipuAPIKey
+		zhipuSvc = agent.NewZhipuService(zhipuCfg)
+		log.Info(ctx, "智谱清言后备服务初始化成功")
+	} else {
+		log.Info(ctx, "智谱清言后备服务未启用（未配置ZHIPU_API_KEY或已禁用）")
+	}
 
 	// 初始化 MySQL
 	mysql, err := dao.NewMySQL(cfg.Database)
@@ -89,7 +121,7 @@ func main() {
 	}
 
 	// 初始化 Agent 服务
-	agentSvc := agent.NewAgentService(ollamaSvc, toolManager)
+	agentSvc := agent.NewAgentService(ollamaSvc, zhipuSvc, toolManager)
 	log.Info(ctx, "Agent 服务初始化完成")
 
 	// 初始化控制器
