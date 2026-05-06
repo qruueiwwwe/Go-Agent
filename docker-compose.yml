@@ -8,14 +8,17 @@ services:
       dockerfile: Dockerfile
     container_name: agent-app
     ports:
-      - "8080:8080"
+      - "25565:25565"
     environment:
       - TZ=Asia/Shanghai
-      - SERVER_PORT=8080
+      - SERVER_PORT=25565
       - OLLAMA_HOST=host.docker.internal:11434
-      - OLLAMA_MODEL=qwen:7b
+      - OLLAMA_MODEL=gemma3:4b
+    env_file:
+      - .env
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
     depends_on:
       - ollama
     restart: unless-stopped
@@ -36,17 +39,15 @@ services:
     networks:
       - agent-network
 
-  # MySQL 服务（可选，用于数据存储）
+  # MySQL 服务（用于缩写词猜测功能）
   mysql:
     image: mysql:8.0
     container_name: agent-mysql
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=agent
-      - MYSQL_USER=agent
-      - MYSQL_PASSWORD=agent123
+      - MYSQL_ROOT_PASSWORD=${DATABASE_PASSWORD:-root}
+      - MYSQL_DATABASE=goagent
     volumes:
       - mysql_data:/var/lib/mysql
     restart: unless-stopped

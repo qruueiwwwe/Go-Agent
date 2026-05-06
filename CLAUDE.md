@@ -138,11 +138,7 @@ docker pull ghcr.io/your-username/agent:v1.0.0
 ### 运行容器
 
 ```bash
-docker run -d \
-  --name agent \
-  -p 8080:8080 \
-  -v ./logs:/app/logs \
-  ghcr.io/your-username/agent:latest
+docker run -d \n  --name agent \n  -p 25565:25565 \n  -v ./logs:/app/logs \n  ghcr.io/your-username/agent:latest
 ```
 
 ## 功能特性

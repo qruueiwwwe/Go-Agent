@@ -153,12 +153,7 @@ jobs:
           docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
           docker stop agent && docker rm agent
-          docker run -d \
-            --name agent \
-            --restart unless-stopped \
-            -p 8080:8080 \
-            -v /opt/agent/logs:/app/logs \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          docker run -d \n            --name agent \n            --restart unless-stopped \n            -p 25565:25565 \n            --env-file /opt/agent/.env \n            -v /opt/agent/logs:/app/logs \n            -v /opt/agent/data:/app/data \n            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
     - name: Notify deployment success
       if: success()

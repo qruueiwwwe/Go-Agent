@@ -9,10 +9,10 @@ import (
 func RegisterAPIRoutes(mux *http.ServeMux, r *Router) {
 	// 聊天接口
 	mux.HandleFunc("/api/chat", r.handleChat)
-	
+
 	// 健康检查
 	mux.HandleFunc("/api/health", r.handleHealth)
-	
+
 	// 文件管理
 	mux.HandleFunc("/api/upload", r.handleUpload)
 	mux.HandleFunc("/api/files", r.handleListFiles)

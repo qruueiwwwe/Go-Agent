@@ -1,13 +1,18 @@
-# Ollama AI Agent 🤖
+# Ollama AI Agent
 
-一个基于 Ollama 大模型的智能助手，支持多种工具扩展，包括天气查询、数学计算、本地文件处理等功能。
+一个基于 Ollama 大模型的智能助手，支持多种工具扩展，包括天气查询、数学计算、本地文件处理、缩写词猜测等功能。当 Ollama 不可用时，自动切换到智谱清言云端API作为后备方案。
 
-## ✨ 核心功能
+## 核心功能
 
-### 🌤️ 天气查询工具（Weather）
+### 大模型服务
+- **Ollama 本地模型**：主要使用本地 Ollama 服务（默认 gemma3:4b）
+- **智谱清言后备**：当 Ollama 不可用时，自动切换到智谱清言云端API
+- **无缝切换**：用户无感知，保证服务持续可用
+
+### 天气查询工具（Weather）
 - 支持 **100+ 中国城市** 天气查询
 - 支持多天气预报（今天、明天、后天、七天）
-- 自动回退策略：Open-Meteo API → wttr.in API
+- 双API策略：接口盒子API（中国气象局数据）→ 高德天气API
 - 示例：
   ```
   "西安今天几度"
@@ -15,7 +20,7 @@
   "上海七天预报"
   ```
 
-### 🧮 数学计算工具（Calculator）
+### 数学计算工具（Calculator）
 - 支持基础四则运算（+、-、*、/）
 - 支持负数和小数计算
 - 示例：
@@ -25,7 +30,17 @@
   "1000 - 200 / 4"
   ```
 
-### 📄 智能文件处理工具（FileTool）
+### 缩写词猜测工具（Nbnhhsh）
+- 猜测网络缩写词含义
+- 支持拼音首字母缩写
+- 示例：
+  ```
+  "yyds是什么意思"
+  "xswl的含义"
+  "awsl"
+  ```
+
+### 智能文件处理工具（FileTool）
 支持多种文件格式和操作方式：
 
 #### 支持格式
@@ -57,18 +72,18 @@
    "把 data/example.md 转换成 HTML"
    ```
 
-### 📁 文件上传与管理
+### 文件上传与管理
 - 支持前端直接上传文件（最大 10MB）
 - 支持文件查看和删除
 - 文件类型白名单（安全性）
 - Web UI 集成文件管理面板
 
-## 🚀 快速开始
+## 快速开始
 
 ### 前提条件
 - Go 1.24.1 或更高版本
 - Ollama 服务运行中（默认地址：`localhost:11434`）
-- 已安装 `qwen:7b` 模型（或其他兼容模型）
+- 已安装 `gemma3:4b` 模型（或其他兼容模型）
 
 ### 安装和运行
 
@@ -78,22 +93,33 @@ git clone <repo-url>
 cd agent
 ```
 
-2. **安装依赖**
+2. **配置环境变量**
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑 .env 文件，填入你的API密钥
+# 必填项：
+# - ZHIPU_API_KEY：智谱清言API密钥（后备服务）
+# 
+# 可选项：
+# - WEATHER_API_ID/KEY：接口盒子天气API
+# - AMAP_API_KEY：高德天气API
+# - DATABASE_PASSWORD：MySQL密码
+```
+
+3. **安装依赖**
 ```bash
 go mod download
 ```
 
-3. **构建**
+4. **构建并运行**
 ```bash
 go build -o agent .
-```
-
-4. **运行**
-```bash
 ./agent
 ```
 
-服务将在 `http://localhost:8080` 启动
+服务将在 `http://localhost:25565` 启动
 
 ### 使用 Makefile
 
@@ -115,24 +141,51 @@ make clean
 
 ```bash
 # 使用 docker-compose
-docker-compose up
+docker-compose up -d
 
 # 或手动构建
 docker build -t agent .
-docker run -p 8080:8080 agent
+docker run -p 25565:25565 --env-file .env agent
 ```
 
-## 📖 使用指南
+## 环境变量配置
+
+创建 `.env` 文件配置敏感信息：
+
+```bash
+# ========== 必填配置 ==========
+
+# 智谱清言API配置（后备服务）
+# 获取地址: https://open.bigmodel.cn/
+ZHIPU_API_KEY=your_zhipu_api_key
+
+# ========== 可选配置 ==========
+
+# 天气API配置（接口盒子）
+WEATHER_API_ID=your_weather_api_id
+WEATHER_API_KEY=your_weather_api_key
+
+# 高德天气API配置
+# 获取地址: https://lbs.amap.com/
+AMAP_API_KEY=your_amap_api_key
+
+# 数据库配置
+DATABASE_PASSWORD=your_db_password
+```
+
+**注意**：`.env` 文件已被 `.gitignore` 忽略，不会提交到代码仓库。
+
+## 使用指南
 
 ### Web 界面
-访问 `http://localhost:8080` 打开前端 Web 界面
+访问 `http://localhost:25565` 打开前端 Web 界面
 
 **功能包括：**
-- 💬 聊天对话框
-- 📋 文件管理面板
-- 📤 文件上传
-- 📋 文件列表查看
-- 🗑️ 文件删除
+- 聊天对话框
+- 文件管理面板
+- 文件上传
+- 文件列表查看
+- 文件删除
 
 ### API 接口
 
@@ -153,7 +206,7 @@ Content-Type: application/json
   "code": 1000,
   "message": "成功",
   "data": {
-    "result": "西安的未来1天天气：\n今天：阴天，最高温度：24°C，最低温度：9°C"
+    "result": "西安未来1天天气：\n今天：阴天，24~9°C"
   }
 }
 ```
@@ -166,34 +219,9 @@ Content-Type: multipart/form-data
 file=@example.txt
 ```
 
-**响应示例：**
-```json
-{
-  "code": 1000,
-  "data": {
-    "filename": "example.txt",
-    "path": "data/example.txt",
-    "size": 1024
-  }
-}
-```
-
 #### 3. 文件列表
 ```bash
 GET /api/files
-```
-
-**响应示例：**
-```json
-{
-  "code": 1000,
-  "data": {
-    "files": [
-      {"name": "example.txt", "size": 1024},
-      {"name": "example.md", "size": 2048}
-    ]
-  }
-}
 ```
 
 #### 4. 删除文件
@@ -206,40 +234,7 @@ Content-Type: application/json
 }
 ```
 
-### 文件工具 JSON 格式
-
-当大模型调用文件工具时，JSON 格式如下：
-
-```json
-{
-  "action": "parse",
-  "file": "data/example.txt",
-  "mode": "summary"
-}
-```
-
-**action 参数：**
-- `parse` - 解析文件（默认）
-- `code_analyze` - 代码分析
-- `convert` - 格式转换
-
-**mode 参数（仅 parse）：**
-- `summary` - 摘要（默认）
-- `extract` - 关键词提取
-- `full` - 完整内容
-
-**type 参数（仅 code_analyze）：**
-- `explain` - 解释代码（默认）
-- `error` - 检查错误
-- `optimize` - 优化建议
-
-**target 参数（仅 convert）：**
-- `html` - 转换为 HTML（Markdown）
-- `word` - 转换为 Word（Markdown）
-- `csv` - 转换为 CSV（JSON）
-- `mindmap` - 转换为思维导图（文本）
-
-## 🏗️ 项目结构
+## 项目结构
 
 ```
 agent/
@@ -248,26 +243,21 @@ agent/
 │       ├── agent/           # Agent 核心逻辑
 │       │   ├── agent.go     # Agent 主逻辑
 │       │   ├── ollama.go    # Ollama 客户端
+│       │   ├── zhipu.go     # 智谱清言服务
 │       │   ├── tool.go      # 工具接口
 │       │   └── file_tool.go # 文件工具实现
-│       ├── file/            # 文件处理模块
-│       │   ├── file_reader.go
-│       │   ├── content_parser.go
-│       │   ├── processors.go
-│       │   └── file_reader_test.go
 │       ├── weather/         # 天气工具
-│       │   └── weather.go
 │       ├── calculator/      # 计算工具
-│       │   └── calculator.go
-│       └── ...
+│       ├── nbnhhsh/         # 缩写词猜测工具
+│       └── file/            # 文件处理模块
 ├── webapi/
 │   └── controllers/         # HTTP 控制器
-│       ├── controller.go    # 聊天控制器
-│       └── file_controller.go  # 文件管理控制器
 ├── router/
 │   └── router.go           # 路由配置
-├── static/
-│   └── index.html          # 前端 Web 界面
+├── static/                  # 前端静态文件
+│   ├── index.html
+│   ├── css/
+│   └── js/
 ├── library/
 │   └── log/                # 日志系统
 ├── global/
@@ -275,63 +265,56 @@ agent/
 │   └── error.go            # 错误定义
 ├── data/                   # 上传文件存储目录
 ├── logs/                   # 日志存储目录
+├── .env                    # 环境变量配置（不提交）
+├── .env.example            # 环境变量模板
 ├── main.go                 # 程序入口
 ├── go.mod
 └── README.md
 ```
 
-## ⚙️ 配置说明
+## 配置说明
 
-配置文件位于 `global/config.go`：
+配置通过 `global/config.go` 和环境变量管理：
 
-```go
-// Ollama 配置
-Ollama: OllamaConfig{
-    Host:    "localhost:11434",   // Ollama 地址
-    Model:   "qwen:7b",          // 使用的模型
-    Timeout: 120 * time.Second,  // 请求超时
-}
+### 服务配置
+| 配置项 | 默认值 | 说明 |
+|-------|-------|------|
+| Server.Port | 25565 | 服务端口 |
+| Server.Timeout | 30s | 请求超时 |
 
-// 服务配置
-Server: ServerConfig{
-    Port:         "8080",
-    ReadTimeout:  30 * time.Second,
-    WriteTimeout: 30 * time.Second,
-}
+### Ollama 配置
+| 配置项 | 默认值 | 说明 |
+|-------|-------|------|
+| Ollama.Host | localhost:11434 | Ollama 地址 |
+| Ollama.Model | gemma3:4b | 使用的模型 |
+| Ollama.Temperature | 0.3 | 温度参数 |
 
-// 日志配置
-Log: LogConfig{
-    Level:      "info",
-    Path:       "./logs",
-    MaxSize:    100,           // MB
-    MaxBackups: 30,            // 保留文件数
-    MaxAge:     7,             // 保留天数
-    Compress:   true,
-}
-```
+### 智谱清言配置
+| 配置项 | 默认值 | 说明 |
+|-------|-------|------|
+| Zhipu.Model | glm-4-flash | 智谱模型 |
+| Zhipu.Timeout | 60s | 请求超时 |
+| Zhipu.Enable | true | 是否启用后备 |
 
-**修改配置方法：**
-编辑 `global/config.go` 中的 `DefaultConfig` 变量，或通过环境变量覆盖：
+## 安全特性
 
-```bash
-export OLLAMA_HOST="192.168.1.100:11434"
-export OLLAMA_MODEL="qwen:14b"
-```
-
-## 🔒 安全特性
+### 密钥安全
+- 所有敏感密钥通过环境变量配置
+- `.env` 文件不会被提交到代码仓库
+- 配置文件中不硬编码任何密钥
 
 ### 文件访问安全
-- **路径验证**：所有文件访问限制在 `./data` 目录
-- **防目录穿透**：检测 `../` 路径尝试
-- **文件类型白名单**：仅允许特定扩展名
-- **大小限制**：单文件最大 10MB
+- 路径验证：所有文件访问限制在 `./data` 目录
+- 防目录穿透：检测 `../` 路径尝试
+- 文件类型白名单：仅允许特定扩展名
+- 大小限制：单文件最大 10MB
 
 ### API 安全
 - 默认本地访问（可配置 CORS）
 - 请求超时保护
 - 错误信息隐藏敏感信息
 
-## 🔧 故障排除
+## 故障排除
 
 ### Ollama 连接失败
 ```
@@ -344,38 +327,31 @@ export OLLAMA_MODEL="qwen:14b"
    ollama serve
    ```
 2. 检查 Ollama 地址配置
-3. 确保端口 11434 未被占用
+3. 系统会自动切换到智谱清言后备服务
+
+### 智谱清言API调用失败
+- 检查 `ZHIPU_API_KEY` 是否正确配置
+- 检查API余额是否充足
+- 查看日志获取详细错误信息
 
 ### 模型不存在
 ```
-错误：模型 qwen:7b 不可用
+错误：模型 gemma3:4b 不可用
 ```
 
 **解决方案：**
 ```bash
-ollama pull qwen:7b
+ollama pull gemma3:4b
 ```
 
 ### 天气工具失败
-天气工具自动回退，如果主 API 失败会尝试备用 API
+天气工具使用双API策略，如果主API失败会自动尝试备用API
 
-### 文件工具权限错误
-```
-错误：权限错误：文件路径不在允许目录内
-```
+### 缩写词工具不可用
+- 确保 MySQL 服务可用
+- 检查 `DATABASE_PASSWORD` 配置
 
-**确保：**
-1. 文件位于 `data/` 目录
-2. 使用相对路径 `data/filename`
-3. 文件名不包含 `../` 等特殊字符
-
-### 大模型不调用工具
-如果大模型直接用知识库回答而不调用工具，系统会自动使用降级策略：
-- 根据关键词识别应该调用哪个工具
-- 自动构造工具调用 JSON
-- 确保功能正常运行
-
-## 📊 日志
+## 日志
 
 日志文件位于 `./logs/` 目录
 
@@ -384,55 +360,28 @@ ollama pull qwen:7b
 tail -f ./logs/agent_*.log
 ```
 
-日志格式：
-```
-[INFO] 2026/04/01 17:20:29 main.go:40: [logid] 日志信息
-```
-
-## 🧪 测试
+## 测试
 
 运行测试：
 ```bash
 go test -v ./...
 ```
 
-特定包测试：
-```bash
-go test -v ./models/service/file/
-go test -v ./models/service/calculator/
-```
-
-## 🤝 贡献指南
-
-欢迎提交 Issue 和 Pull Request
-
-## 📝 版本信息
+## 版本信息
 
 查看版本信息：
 ```bash
 ./agent version
 ```
 
-或访问 API：
-```bash
-curl http://localhost:8080/api/chat -X POST
-```
-
-## 📄 许可证
+## 许可证
 
 MIT License
 
-## 🙏 致谢
+## 致谢
 
 - [Ollama](https://ollama.ai) - 本地 LLM 框架
+- [智谱清言](https://open.bigmodel.cn/) - 云端大模型API
 - [pdfcpu](https://github.com/pdfcpu/pdfcpu) - PDF 处理库
-- [Open-Meteo](https://open-meteo.com) - 天气数据来源
-
-## 📧 联系方式
-
-如有问题或建议，请通过 Issue 联系我们
-
----
-
-**最后更新：** 2026 年 4 月 1 日  
-**当前版本：** v1.0.0
+- [接口盒子](https://cn.apihz.cn/) - 天气数据来源
+- [高德地图](https://lbs.amap.com/) - 天气数据来源

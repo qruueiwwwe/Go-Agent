@@ -15,9 +15,7 @@ RUN go mod download
 COPY . .
 
 # 构建应用
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o agent .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o agent .
 
 # 运行阶段 - 使用轻量级镜像
 FROM alpine:latest
@@ -29,16 +27,14 @@ RUN apk --no-cache add ca-certificates tzdata
 ENV TZ=Asia/Shanghai
 
 # 创建非 root 用户
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
 
 # 从构建阶段复制二进制文件
 COPY --from=builder /app/agent /app/agent
 COPY --from=builder /app/static /app/static
 
-# 创建日志目录
-RUN mkdir -p /app/logs && \
-    chown -R appuser:appuser /app
+# 创建日志和数据目录
+RUN mkdir -p /app/logs /app/data && chown -R appuser:appuser /app
 
 # 切换到非 root 用户
 USER appuser
@@ -47,11 +43,10 @@ USER appuser
 WORKDIR /app
 
 # 暴露端口
-EXPOSE 8080
+EXPOSE 25565
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider http://localhost:25565/ || exit 1
 
 # 启动应用
 CMD ["./agent"]
