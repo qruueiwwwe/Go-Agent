@@ -7,8 +7,11 @@ BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GO=go
 GOFLAGS=-ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -w -s"
 
-# API Key（可通过 make build-with-key ZHIPU_KEY=xxx 注入）
+# API Key（可通过 make release ZHIPU_KEY=xxx 注入）
 ZHIPU_KEY?=
+WEATHER_ID?=
+WEATHER_KEY?=
+AMAP_KEY?=
 
 # 颜色输出
 COLOR_RESET=\033[0m
@@ -43,12 +46,12 @@ build-with-key: ## 构建应用并内置智谱API Key（用法: make build-with-
 	@echo "$(COLOR_GREEN)构建完成: $(APP_NAME)（已内置智谱API Key）$(COLOR_RESET)"
 
 .PHONY: release
-release: ## 构建完整发布版本（内置前端+API Key，用法: make release ZHIPU_KEY=your_key）
+release: ## 构建完整发布版本（内置前端+所有API Key）
 	@echo "$(COLOR_BLUE)正在构建发布版本...$(COLOR_RESET)"
 	@test -n "$(ZHIPU_KEY)" || { echo "$(COLOR_YELLOW)错误: 请提供 ZHIPU_KEY 参数$(COLOR_RESET)"; exit 1; }
-	$(GO) build -ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.ZhipuAPIKey=$(ZHIPU_KEY) -w -s" -o $(APP_NAME) .
+	$(GO) build -ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.ZhipuAPIKey=$(ZHIPU_KEY) -X main.WeatherAPIID=$(WEATHER_ID) -X main.WeatherAPIKey=$(WEATHER_KEY) -X main.AmapAPIKey=$(AMAP_KEY) -w -s" -o $(APP_NAME) .
 	@echo "$(COLOR_GREEN)构建完成: $(APP_NAME)$(COLOR_RESET)"
-	@echo "$(COLOR_GREEN)已内置: 前端静态文件 + 智谱API Key$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)已内置: 前端静态文件 + API Keys$(COLOR_RESET)"
 	@ls -lh $(APP_NAME)
 
 .PHONY: build-all

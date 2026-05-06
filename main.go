@@ -24,10 +24,13 @@ import (
 
 // 版本信息，通过 ldflags 注入
 var (
-	Version     = "dev"
-	BuildTime   = "unknown"
-	GitCommit   = "unknown"
-	ZhipuAPIKey = "" // 可通过 ldflags 在编译时注入
+	Version       = "dev"
+	BuildTime     = "unknown"
+	GitCommit     = "unknown"
+	ZhipuAPIKey   = "" // 智谱清言API Key
+	WeatherAPIID  = "" // 接口盒子天气API ID
+	WeatherAPIKey = "" // 接口盒子天气API Key
+	AmapAPIKey    = "" // 高德天气API Key
 )
 
 func main() {
@@ -72,16 +75,26 @@ func main() {
 	cfg := global.DefaultConfig
 	cfg.Server.Port = "25565"
 
-	// 从环境变量覆盖敏感配置
+	// 从环境变量或编译时注入的值覆盖配置
+	// 天气API ID
 	if weatherID := os.Getenv("WEATHER_API_ID"); weatherID != "" {
 		cfg.WeatherAPI.ID = weatherID
+	} else if WeatherAPIID != "" {
+		cfg.WeatherAPI.ID = WeatherAPIID
 	}
+	// 天气API Key
 	if weatherKey := os.Getenv("WEATHER_API_KEY"); weatherKey != "" {
 		cfg.WeatherAPI.Key = weatherKey
+	} else if WeatherAPIKey != "" {
+		cfg.WeatherAPI.Key = WeatherAPIKey
 	}
+	// 高德天气API Key
 	if amapKey := os.Getenv("AMAP_API_KEY"); amapKey != "" {
 		cfg.WeatherAPI.AmapKey = amapKey
+	} else if AmapAPIKey != "" {
+		cfg.WeatherAPI.AmapKey = AmapAPIKey
 	}
+	// 数据库密码
 	if dbPassword := os.Getenv("DATABASE_PASSWORD"); dbPassword != "" {
 		cfg.Database.Password = dbPassword
 	}
