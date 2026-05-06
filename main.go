@@ -24,15 +24,16 @@ import (
 
 // 版本信息，通过 ldflags 注入
 var (
-	Version   = "dev"
-	BuildTime = "unknown"
-	GitCommit = "unknown"
+	Version     = "dev"
+	BuildTime   = "unknown"
+	GitCommit   = "unknown"
+	ZhipuAPIKey = "" // 可通过 ldflags 在编译时注入
 )
 
 func main() {
 	// 加载 .env 文件（如果存在）
 	if err := godotenv.Load(); err != nil {
-		log.InfoOld(".env 文件不存在，使用系统环境变量")
+		log.InfoOld(".env 文件不存在，使用系统环境变量或编译时配置")
 	}
 
 	// 显示版本信息
@@ -40,6 +41,25 @@ func main() {
 		fmt.Printf("Agent Version: %s\n", Version)
 		fmt.Printf("Build Time: %s\n", BuildTime)
 		fmt.Printf("Git Commit: %s\n", GitCommit)
+		os.Exit(0)
+	}
+
+	// 显示帮助信息
+	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
+		fmt.Println("Agent - AI 智能助手")
+		fmt.Println()
+		fmt.Println("用法: agent [命令]")
+		fmt.Println()
+		fmt.Println("命令:")
+		fmt.Println("  version  显示版本信息")
+		fmt.Println("  -h, --help  显示帮助信息")
+		fmt.Println()
+		fmt.Println("环境变量:")
+		fmt.Println("  ZHIPU_API_KEY     智谱清言API密钥（必填）")
+		fmt.Println("  WEATHER_API_ID    接口盒子天气API ID")
+		fmt.Println("  WEATHER_API_KEY   接口盒子天气API Key")
+		fmt.Println("  AMAP_API_KEY      高德天气API Key")
+		fmt.Println("  DATABASE_PASSWORD MySQL数据库密码")
 		os.Exit(0)
 	}
 
@@ -70,30 +90,43 @@ func main() {
 	log.Init(cfg.Log)
 	log.Info(ctx, "日志系统初始化完成")
 
-	// 初始化 Ollama 客户端
+	// 初始化 Ollama 客户端（可选）
+	var client *api.Client
 	client, err := api.ClientFromEnvironment()
 	if err != nil {
-		log.Error(ctx, "初始化 Ollama 客户端失败: %v", err)
-		// 使用旧的日志方式兼容
-		log.InfoOld("初始化 Ollama 客户端失败: %v", err)
-		panic(err)
+		log.Info(ctx, "Ollama 客户端创建失败: %v，将使用智谱清言服务", err)
+	} else {
+		log.Info(ctx, "Ollama 客户端已创建（实际连接在首次调用时验证）")
 	}
-	log.Info(ctx, "Ollama 客户端初始化成功")
 
-	// 初始化 Ollama 服务
-	ollamaSvc := agent.NewOllamaService(client, cfg.Ollama.Model, cfg.Ollama.Temperature)
-	log.Info(ctx, "Ollama 服务初始化成功")
+	// 初始化 Ollama 服务（如果客户端可用）
+	var ollamaSvc *agent.OllamaService
+	if client != nil {
+		ollamaSvc = agent.NewOllamaService(client, cfg.Ollama.Model, cfg.Ollama.Temperature)
+		log.Info(ctx, "Ollama 服务已配置")
+	} else {
+		log.Info(ctx, "Ollama 服务未配置，将使用智谱清言服务")
+	}
 
 	// 初始化智谱清言后备服务
 	var zhipuSvc *agent.ZhipuService
 	zhipuAPIKey := os.Getenv("ZHIPU_API_KEY")
+
+	// 如果环境变量没有设置，使用编译时注入的值
+	if zhipuAPIKey == "" {
+		zhipuAPIKey = ZhipuAPIKey
+	}
+
 	if zhipuAPIKey != "" && cfg.Zhipu.Enable {
 		zhipuCfg := cfg.Zhipu
 		zhipuCfg.APIKey = zhipuAPIKey
 		zhipuSvc = agent.NewZhipuService(zhipuCfg)
 		log.Info(ctx, "智谱清言后备服务初始化成功")
 	} else {
-		log.Info(ctx, "智谱清言后备服务未启用（未配置ZHIPU_API_KEY或已禁用）")
+		log.Warn(ctx, "智谱清言后备服务未启用（未配置ZHIPU_API_KEY）")
+		if ollamaSvc == nil {
+			log.Error(ctx, "警告：Ollama 和智谱清言都不可用，服务将无法处理对话请求！")
+		}
 	}
 
 	// 初始化 MySQL
@@ -131,6 +164,7 @@ func main() {
 
 	// 初始化路由
 	r := router.NewRouter(chatCtrl, toolCtrl)
+	r.SetStaticFS(StaticFS()) // 使用嵌入的静态文件
 	mux := http.NewServeMux()
 	r.RegisterRoutes(mux)
 

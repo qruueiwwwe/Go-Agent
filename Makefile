@@ -7,6 +7,9 @@ BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GO=go
 GOFLAGS=-ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -w -s"
 
+# API Key（可通过 make build-with-key ZHIPU_KEY=xxx 注入）
+ZHIPU_KEY?=
+
 # 颜色输出
 COLOR_RESET=\033[0m
 COLOR_GREEN=\033[32m
@@ -31,6 +34,22 @@ build: ## 构建应用（当前平台）
 	@echo "$(COLOR_BLUE)正在构建应用...$(COLOR_RESET)"
 	$(GO) build $(GOFLAGS) -o $(APP_NAME) .
 	@echo "$(COLOR_GREEN)构建完成: $(APP_NAME)$(COLOR_RESET)"
+
+.PHONY: build-with-key
+build-with-key: ## 构建应用并内置智谱API Key（用法: make build-with-key ZHIPU_KEY=your_key）
+	@echo "$(COLOR_BLUE)正在构建应用（内置API Key）...$(COLOR_RESET)"
+	@test -n "$(ZHIPU_KEY)" || { echo "$(COLOR_YELLOW)错误: 请提供 ZHIPU_KEY 参数$(COLOR_RESET)"; exit 1; }
+	$(GO) build -ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.ZhipuAPIKey=$(ZHIPU_KEY) -w -s" -o $(APP_NAME) .
+	@echo "$(COLOR_GREEN)构建完成: $(APP_NAME)（已内置智谱API Key）$(COLOR_RESET)"
+
+.PHONY: release
+release: ## 构建完整发布版本（内置前端+API Key，用法: make release ZHIPU_KEY=your_key）
+	@echo "$(COLOR_BLUE)正在构建发布版本...$(COLOR_RESET)"
+	@test -n "$(ZHIPU_KEY)" || { echo "$(COLOR_YELLOW)错误: 请提供 ZHIPU_KEY 参数$(COLOR_RESET)"; exit 1; }
+	$(GO) build -ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.ZhipuAPIKey=$(ZHIPU_KEY) -w -s" -o $(APP_NAME) .
+	@echo "$(COLOR_GREEN)构建完成: $(APP_NAME)$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)已内置: 前端静态文件 + 智谱API Key$(COLOR_RESET)"
+	@ls -lh $(APP_NAME)
 
 .PHONY: build-all
 build-all: ## 构建所有平台的二进制文件
@@ -57,11 +76,7 @@ test-coverage: test ## 生成测试覆盖率报告
 lint: ## 运行代码检查
 	@echo "$(COLOR_BLUE)正在检查代码...$(COLOR_RESET)"
 	@$(GO) vet ./...
-	@if [ -n "$$(gofmt -l .)" ]; then \
-		echo "$(COLOR_YELLOW)以下文件需要格式化:$(COLOR_RESET)"; \
-		gofmt -d .; \
-		exit 1; \
-	fi
+	@test -z "$$(gofmt -l .)" || { echo "$(COLOR_YELLOW)以下文件需要格式化:$(COLOR_RESET)"; gofmt -d .; exit 1; }
 	@echo "$(COLOR_GREEN)代码检查通过$(COLOR_RESET)"
 
 .PHONY: fmt
@@ -113,28 +128,14 @@ update-deps: ## 更新依赖
 .PHONY: security
 security: ## 安全扫描
 	@echo "$(COLOR_BLUE)正在运行安全扫描...$(COLOR_RESET)"
-	@if command -v gosec >/dev/null 2>&1; then \
-		gosec ./...; \
-	else \
-		echo "$(COLOR_YELLOW)gosec 未安装，跳过安全扫描$(COLOR_RESET)"; \
-	fi
+	@command -v gosec >/dev/null 2>&1 && gosec ./... || echo "$(COLOR_YELLOW)gosec 未安装，跳过安全扫描$(COLOR_RESET)"
 
 .PHONY: version
 version: ## 显示版本信息
 	@echo "Version: $(VERSION)"
 	@echo "Build Time: $(BUILD_TIME)"
 
-.PHONY: release
-release: clean build-all ## 发布版本
-	@echo "$(COLOR_BLUE)准备发布版本 $(VERSION)...$(COLOR_RESET)"
-	@echo "请手动创建 Git tag: git tag v$(VERSION) && git push --tags"
-
 .PHONY: dev
 dev: ## 开发模式（运行并监控）
 	@echo "$(COLOR_BLUE)启动开发模式...$(COLOR_RESET)"
-	@if command -v air >/dev/null 2>&1; then \
-		air; \
-	else \
-		echo "$(COLOR_YELLOW)air 未安装，请运行: go install github.com/cosmtrek/air@latest$(COLOR_RESET)"; \
-		$(GO) run main.go; \
-	fi
+	@command -v air >/dev/null 2>&1 && air || { echo "$(COLOR_YELLOW)air 未安装，请运行: go install github.com/cosmtrek/air@latest$(COLOR_RESET)"; $(GO) run main.go; }

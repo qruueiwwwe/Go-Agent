@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"io/fs"
 	"net/http"
 
 	"agent/webapi/controllers"
@@ -13,6 +14,7 @@ type Router struct {
 	healthCtrl *controllers.HealthController
 	fileCtrl   *controllers.FileUploadController
 	internal   *InternalRouter
+	staticFS   fs.FS // 静态文件系统（可选，用于嵌入模式）
 }
 
 // NewRouter 创建路由
@@ -25,10 +27,21 @@ func NewRouter(chatCtrl *controllers.ChatController, toolCtrl *controllers.ToolC
 	}
 }
 
+// SetStaticFS 设置静态文件系统（用于嵌入模式）
+func (r *Router) SetStaticFS(fsys fs.FS) {
+	r.staticFS = fsys
+}
+
 // RegisterRoutes 注册路由
 func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 	// 静态文件
-	mux.Handle("/", http.FileServer(http.Dir("./static")))
+	if r.staticFS != nil {
+		// 使用嵌入的静态文件
+		mux.Handle("/", http.FileServer(http.FS(r.staticFS)))
+	} else {
+		// 使用外部静态文件（开发模式）
+		mux.Handle("/", http.FileServer(http.Dir("./static")))
+	}
 
 	// 前端 API（/api/*）
 	RegisterAPIRoutes(mux, r)

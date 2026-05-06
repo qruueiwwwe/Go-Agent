@@ -73,28 +73,43 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 	log.Info(ctx, "开始处理用户消息: %s", userMessage)
 
 	// 调用大模型
-	resp, err := s.ollamaSvc.Chat(ctx, msgs)
-	if err != nil {
-		log.Warn(ctx, "Ollama调用失败: %v，尝试智谱后备", err)
+	var resp string
+	var err error
 
-		// 尝试智谱后备
-		if s.zhipuSvc != nil {
-			resp, err = s.zhipuSvc.Chat(ctx, convertToZhipuMessages(msgs))
-			if err != nil {
-				log.Error(ctx, "智谱后备也失败: %v", err)
-				return "服务暂时不可用，请稍后重试"
-			}
-			log.Info(ctx, "智谱后备响应成功")
-		} else {
-			log.Error(ctx, "智谱后备未配置")
+	// 优先使用 Ollama，如果不可用则直接使用智谱清言
+	if s.ollamaSvc != nil {
+		resp, err = s.ollamaSvc.Chat(ctx, msgs)
+		if err != nil {
+			log.Warn(ctx, "Ollama调用失败: %v，尝试智谱后备", err)
+		}
+	} else {
+		log.Info(ctx, "Ollama服务不可用，直接使用智谱清言")
+	}
+
+	// 如果 Ollama 失败或不可用，尝试智谱后备
+	if resp == "" && s.zhipuSvc != nil {
+		resp, err = s.zhipuSvc.Chat(ctx, convertToZhipuMessages(msgs))
+		if err != nil {
+			log.Error(ctx, "智谱清言调用失败: %v", err)
 			return "服务暂时不可用，请稍后重试"
 		}
+		log.Info(ctx, "智谱清言响应成功")
+	} else if resp == "" && s.zhipuSvc == nil {
+		log.Error(ctx, "Ollama和智谱清言都不可用")
+		return "服务暂时不可用，请配置 Ollama 或智谱清言API"
 	}
 
 	log.Info(ctx, "大模型响应: %s", resp)
 
-	// 检查是否需要调用工具
-	toolName, toolInput, isToolCall := s.ollamaSvc.ParseToolCall(resp)
+	// 检查是否需要调用工具（优先使用智谱解析，因为它可能更准确）
+	var toolName, toolInput string
+	var isToolCall bool
+	if s.zhipuSvc != nil {
+		toolName, toolInput, isToolCall = s.zhipuSvc.ParseToolCall(resp)
+	} else if s.ollamaSvc != nil {
+		toolName, toolInput, isToolCall = s.ollamaSvc.ParseToolCall(resp)
+	}
+
 	if isToolCall {
 		log.Info(ctx, "调用工具: %s, 参数: %s", toolName, toolInput)
 
