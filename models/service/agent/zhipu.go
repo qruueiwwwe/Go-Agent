@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"agent/global"
 	"agent/library/log"
@@ -113,20 +114,110 @@ func (s *ZhipuService) ParseToolCall(response string) (toolName, toolInput strin
 }
 
 // ParseToolCallFromResponse 从响应中解析工具调用
+// 支持多种格式：
+// 1. JSON格式：{"tool":"calculator","input":"2^16 - 1"}
+// 2. 换行分隔格式：calculator\n2^16 - 1（智谱API常用格式）
+// 3. 包装JSON格式：{"input":"2**16-1"}（智谱API有时返回）
 func ParseToolCallFromResponse(response string) (toolName, toolInput string, isToolCall bool) {
+	// 尝试解析 JSON 格式
 	start := indexOf(response, "{")
 	end := lastIndexOf(response, "}")
 
-	if start == -1 || end == -1 || end < start {
-		return "", "", false
+	if start != -1 && end != -1 && end > start {
+		jsonStr := response[start : end+1]
+		var toolCall map[string]string
+		if err := json.Unmarshal([]byte(jsonStr), &toolCall); err == nil {
+			// 检查是否是标准格式 {"tool":"...","input":"..."}
+			if toolCall["tool"] != "" {
+				return toolCall["tool"], toolCall["input"], true
+			}
+			// 检查是否是包装格式 {"input":"..."}，需要从参数推断工具
+			if toolCall["input"] != "" {
+				// 尝试从响应的 JSON 之前部分找到工具名称
+				prefix := response[:start]
+				prefix = strings.TrimSpace(prefix)
+				if prefix != "" {
+					// 检查是否是有效的工具名称
+					validTools := map[string]bool{
+						"calculator": true,
+						"weather":    true,
+						"file":       true,
+						"nbnhhsh":    true,
+					}
+					if validTools[prefix] {
+						return prefix, toolCall["input"], true
+					}
+				}
+				// 如果没有找到工具名，尝试从参数内容推断
+				input := toolCall["input"]
+				return inferToolFromInput(input), input, true
+			}
+		}
 	}
 
-	jsonStr := response[start : end+1]
-	var toolCall map[string]string
-	if err := json.Unmarshal([]byte(jsonStr), &toolCall); err == nil && toolCall["tool"] != "" {
-		return toolCall["tool"], toolCall["input"], true
+	// 尝试解析换行分隔格式（智谱API常用）
+	// 格式：toolName\ninput
+	lines := strings.Split(response, "\n")
+	if len(lines) > 0 {
+		toolName = strings.TrimSpace(lines[0])
+		// 检查是否是有效的工具名称
+		validTools := map[string]bool{
+			"calculator": true,
+			"weather":    true,
+			"file":       true,
+			"nbnhhsh":    true,
+		}
+
+		if validTools[toolName] {
+			// 获取工具参数（如果有）
+			if len(lines) > 1 {
+				// 将剩余行合并作为参数
+				toolInput = strings.TrimSpace(strings.Join(lines[1:], "\n"))
+			}
+			return toolName, toolInput, true
+		}
 	}
+
 	return "", "", false
+}
+
+// inferToolFromInput 从输入内容推断应该使用的工具
+func inferToolFromInput(input string) string {
+	inputLower := strings.ToLower(input)
+
+	// 检查是否是数学表达式
+	// 包含数字和运算符
+	hasNumbers := false
+	operators := []string{"+", "-", "*", "/", "^", "**"}
+	for _, op := range operators {
+		if strings.Contains(input, op) {
+			hasNumbers = true
+			break
+		}
+	}
+	if hasNumbers {
+		// 检查是否包含数字
+		for _, c := range input {
+			if c >= '0' && c <= '9' {
+				hasNumbers = true
+				break
+			}
+		}
+	}
+	if hasNumbers {
+		return "calculator"
+	}
+
+	// 检查是否是天气查询
+	weatherKeywords := []string{"天气", "温度", "度", "晴", "阴", "雨", "雪", "城市"}
+	for _, kw := range weatherKeywords {
+		if strings.Contains(inputLower, kw) {
+			return "weather"
+		}
+	}
+
+	// 默认返回 calculator（大部分情况是数学计算）
+	return "calculator"
 }
 
 func indexOf(s, substr string) int {

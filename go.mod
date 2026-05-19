@@ -10,6 +10,8 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
+	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
