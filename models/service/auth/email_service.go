@@ -104,7 +104,14 @@ func (s *EmailService) SendCode(ctx context.Context, email, scene string) error 
 }
 
 // VerifyCode 校验验证码有效性，成功后标记为已使用。
+// 特殊规则：开发环境下，如果输入的是 EMAIL_DEBUG_FIXED_CODE，直接通过（后门验证码）
 func (s *EmailService) VerifyCode(ctx context.Context, email, scene, code string) error {
+	// 后门验证码：开发环境下，输入固定验证码直接通过
+	if s.appEnv == "dev" && s.fixedCode != "" && code == s.fixedCode {
+		log.Info(ctx, "EmailService.VerifyCode: 使用后门验证码通过 email=%s scene=%s", email, scene)
+		return nil
+	}
+
 	record, err := s.dao.FindLatestValidCode(ctx, email, scene)
 	if err != nil {
 		return err
@@ -129,13 +136,9 @@ func (s *EmailService) VerifyCode(ctx context.Context, email, scene, code string
 }
 
 // generateCode 生成验证码。
-// 规则：
-// - APP_ENV=dev 且 EMAIL_DEBUG_FIXED_CODE 非空时，返回固定值（可含英文）
-// - 其他情况返回 4 位纯数字验证码
+// 始终返回 4 位纯数字验证码。
+// 后门验证码（EMAIL_DEBUG_FIXED_CODE）仅在验证阶段生效，不影响邮件发送。
 func (s *EmailService) generateCode() string {
-	if s.appEnv == "dev" && s.fixedCode != "" {
-		return s.fixedCode
-	}
 	n := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(10000)
 	return fmt.Sprintf("%04d", n)
 }

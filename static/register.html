@@ -87,8 +87,8 @@
                     body: JSON.stringify({ email, scene: 'register' })
                 });
                 const result = await response.json();
-                if (result.code !== 200) {
-                    throw new Error(result.message || '发送失败');
+                if (result.errno !== 0) {
+                    throw new Error(result.errmsg || '发送失败');
                 }
                 errorMessage.style.display = 'none';
                 countdown = 60;
@@ -172,12 +172,12 @@
                 });
                 
                 const result = await response.json();
-                
-                if (result.code === 200) {
+
+                if (result.errno === 0) {
                     alert('注册成功，请登录');
                     window.location.href = '/login.html';
                 } else {
-                    errorMessage.textContent = result.message || '注册失败';
+                    errorMessage.textContent = result.errmsg || '注册失败';
                     errorMessage.style.display = 'block';
                 }
             } catch (error) {

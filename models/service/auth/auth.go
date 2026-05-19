@@ -15,6 +15,7 @@ var (
 	ErrUserExists         = errors.New("用户名已存在")
 	ErrInvalidCredentials = errors.New("用户名或密码错误")
 	ErrUserDisabled       = errors.New("用户已被禁用")
+	ErrUserDeleted        = errors.New("账号已被删除")
 	ErrPasswordTooShort   = errors.New("密码长度至少6位")
 	ErrInvalidPhone       = errors.New("手机号格式不正确")
 	ErrInvalidSMScene     = errors.New("验证码场景不正确")
@@ -127,6 +128,9 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (str
 	}
 
 	// 检查用户状态
+	if user.Status == -1 {
+		return "", nil, ErrUserDeleted
+	}
 	if user.Status == 0 {
 		return "", nil, ErrUserDisabled
 	}

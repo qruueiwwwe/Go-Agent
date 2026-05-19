@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agent/library/log"
 	"agent/models/service/auth"
 	"agent/webapi/controllers"
 )
@@ -13,24 +14,26 @@ import (
 // AuthMiddleware JWT 认证中间件
 func AuthMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logid := log.GenerateLogID()
+
 		// 从 Header 获取 token
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			respondAuthError(w, http.StatusUnauthorized, "未登录")
+			respondAuthError(w, 401, "未登录", logid)
 			return
 		}
 
 		// Bearer token 格式
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == authHeader {
-			respondAuthError(w, http.StatusUnauthorized, "无效的认证格式")
+			respondAuthError(w, 401, "无效的认证格式", logid)
 			return
 		}
 
 		// 验证 token
 		claims, err := authSvc.ParseToken(tokenString)
 		if err != nil {
-			respondAuthError(w, http.StatusUnauthorized, "登录已过期")
+			respondAuthError(w, 401, "登录已过期", logid)
 			return
 		}
 
@@ -40,13 +43,34 @@ func AuthMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.Handl
 	}
 }
 
+// AdminMiddleware 管理员权限中间件
+func AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims := controllers.GetUserFromContext(r.Context())
+		logid := log.GenerateLogIDWithUser(claims)
+
+		if claims == nil {
+			respondAuthError(w, 401, "未登录", logid)
+			return
+		}
+
+		if claims.Role != "admin" {
+			respondAuthError(w, 403, "无权限访问", logid)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 // respondAuthError 返回认证错误响应
-func respondAuthError(w http.ResponseWriter, code int, message string) {
+func respondAuthError(w http.ResponseWriter, errno int, errmsg string, logid string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"code":    code,
-		"message": message,
-		"data":    nil,
+	w.WriteHeader(http.StatusOK) // 统一返回 200
+	json.NewEncoder(w).Encode(controllers.Response{
+		Data:   nil,
+		Errmsg: errmsg,
+		Errno:  errno,
+		Logid:  logid,
 	})
 }

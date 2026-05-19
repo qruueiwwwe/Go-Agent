@@ -162,19 +162,30 @@ func main() {
 	// 初始化认证服务
 	var authCtrl *controllers.AuthController
 	var authSvc *authService.AuthService
+	var rateLimiter *authService.RateLimiter
+	var adminCtrl *controllers.AdminController
+	var userDAO *dao.UserDAO
 	if mysql != nil {
 		jwtSecret := os.Getenv("JWT_SECRET")
 		if jwtSecret == "" {
 			jwtSecret = "default-secret-key-please-change-in-production"
 			log.Warn(ctx, "JWT_SECRET 未设置，使用默认密钥（不安全！）")
 		}
-		userDAO := dao.NewUserDAO(mysql)
+		userDAO = dao.NewUserDAO(mysql)
 		smsCodeDAO := dao.NewSMSCodeDAO(mysql)
 		smsSvc := authService.NewSMSService(smsCodeDAO)
 		emailCodeDAO := dao.NewEmailCodeDAO(mysql)
 		emailSvc := authService.NewEmailService(emailCodeDAO)
 		authSvc = authService.NewAuthService(userDAO, smsCodeDAO, smsSvc, emailCodeDAO, emailSvc, jwtSecret, 24*time.Hour)
 		authCtrl = controllers.NewAuthController(authSvc, smsSvc, emailSvc)
+
+		// 初始化频率限制服务
+		rateLimitDAO := dao.NewRateLimitDAO(mysql)
+		rateLimiter = authService.NewRateLimiter(rateLimitDAO)
+
+		// 初始化后台管理控制器
+		adminCtrl = controllers.NewAdminController(userDAO)
+
 		log.Info(ctx, "认证服务初始化完成")
 	} else {
 		log.Warn(ctx, "MySQL 不可用，认证服务未启用")
@@ -200,7 +211,7 @@ func main() {
 	log.Info(ctx, "Agent 服务初始化完成")
 
 	// 初始化控制器
-	chatCtrl := controllers.NewChatController(agentSvc)
+	chatCtrl := controllers.NewChatController(agentSvc, rateLimiter)
 	toolCtrl := controllers.NewToolController(toolManager)
 	log.Info(ctx, "控制器初始化完成")
 
@@ -209,6 +220,9 @@ func main() {
 	r.SetStaticFS(StaticFS()) // 使用嵌入的静态文件
 	if authCtrl != nil && authSvc != nil {
 		r.SetAuth(authCtrl, authSvc)
+	}
+	if adminCtrl != nil {
+		r.SetAdmin(adminCtrl)
 	}
 	mux := http.NewServeMux()
 	r.RegisterRoutes(mux)

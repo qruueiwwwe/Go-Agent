@@ -81,7 +81,7 @@ func (m *MySQL) AutoMigrate(ctx context.Context) error {
 		id BIGINT PRIMARY KEY AUTO_INCREMENT,
 		email VARCHAR(255) NOT NULL COMMENT '邮箱',
 		scene VARCHAR(32) NOT NULL COMMENT '场景: register/reset_password',
-		code VARCHAR(6) NOT NULL COMMENT '验证码',
+		code VARCHAR(20) NOT NULL COMMENT '验证码',
 		expired_at DATETIME NOT NULL COMMENT '过期时间',
 		used TINYINT DEFAULT 0 COMMENT '是否已使用',
 		attempts INT DEFAULT 0 COMMENT '尝试次数',
@@ -97,7 +97,24 @@ func (m *MySQL) AutoMigrate(ctx context.Context) error {
 		return fmt.Errorf("创建邮箱验证码表失败: %v", err)
 	}
 
-	log.Info(ctx, "AutoMigrate: 用户表与邮箱验证码表迁移完成")
+	// 创建频率限制记录表
+	createRateLimitTable := `
+	CREATE TABLE IF NOT EXISTS rate_limits (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		user_id BIGINT NOT NULL COMMENT '用户ID',
+		endpoint VARCHAR(50) NOT NULL COMMENT '接口标识',
+		request_at DATETIME NOT NULL COMMENT '请求时间',
+		INDEX idx_user_endpoint_time (user_id, endpoint, request_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='频率限制记录表';
+	`
+
+	_, err = m.db.ExecContext(ctx, createRateLimitTable)
+	if err != nil {
+		log.Error(ctx, "AutoMigrate: 创建频率限制表失败 err=%v", err)
+		return fmt.Errorf("创建频率限制表失败: %v", err)
+	}
+
+	log.Info(ctx, "AutoMigrate: 数据库迁移完成")
 	return nil
 }
 

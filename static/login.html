@@ -71,16 +71,16 @@
                 });
                 
                 const result = await response.json();
-                
-                if (result.code === 200 && result.data) {
+
+                if (result.errno === 0 && result.data) {
                     // 保存 token 和用户信息
                     localStorage.setItem('token', result.data.token);
                     localStorage.setItem('user', JSON.stringify(result.data.user));
-                    
+
                     // 跳转到主页
                     window.location.href = '/';
                 } else {
-                    errorMessage.textContent = result.message || '登录失败';
+                    errorMessage.textContent = result.errmsg || '登录失败';
                     errorMessage.style.display = 'block';
                 }
             } catch (error) {

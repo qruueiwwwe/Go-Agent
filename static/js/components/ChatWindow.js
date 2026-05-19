@@ -9,6 +9,21 @@ import { FileManager } from './FileManager.js';
 import { ToastContainer } from './Toast.js';
 
 /**
+ * 获取当前用户信息
+ */
+function getCurrentUser() {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        try {
+            return JSON.parse(userStr);
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+/**
  * ChatWindow 组件 - 聊天主窗口
  *
  * Props:
@@ -64,6 +79,12 @@ export const ChatWindow = defineComponent({
         }
     },
 
+    data() {
+        return {
+            user: getCurrentUser()
+        };
+    },
+
     methods: {
         handleSend(message) {
             this.$emit('send', message);
@@ -87,10 +108,23 @@ export const ChatWindow = defineComponent({
 
         handleAnalyzeFile(filename) {
             this.$emit('analyze-file', filename);
+        },
+
+        goToAdmin() {
+            window.location.href = '/admin.html';
+        },
+
+        logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
         }
     },
 
     render() {
+        const user = this.user;
+        const isAdmin = user && user.role === 'admin';
+
         return h('div', { class: 'main-content' }, [
             // 头部
             h('div', { class: 'app-header' }, [
@@ -103,6 +137,24 @@ export const ChatWindow = defineComponent({
                         h('h1', this.title),
                         h('p', this.subtitle)
                     ])
+                ]),
+                // 用户信息区
+                h('div', { class: 'header-right' }, [
+                    isAdmin ? h('button', {
+                        class: 'admin-btn',
+                        onClick: this.goToAdmin
+                    }, '后台管理') : null,
+                    h('div', { class: 'user-info' }, [
+                        h('span', { class: 'username' }, user ? user.username : '用户'),
+                        user && user.role ? h('span', { class: 'user-role ' + user.role }, 
+                            user.role === 'admin' ? '管理员' : 
+                            user.role === 'vip' ? 'VIP' : '用户'
+                        ) : null
+                    ]),
+                    h('button', {
+                        class: 'logout-btn',
+                        onClick: this.logout
+                    }, '退出')
                 ])
             ]),
 

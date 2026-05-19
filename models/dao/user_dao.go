@@ -224,3 +224,59 @@ func (d *UserDAO) Update(ctx context.Context, user *User) error {
 	log.Info(ctx, "UserDAO.Update: 用户更新成功 id=%d", user.ID)
 	return nil
 }
+
+// ListAll 获取所有用户列表
+func (d *UserDAO) ListAll(ctx context.Context) ([]*User, error) {
+	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
+	          FROM users ORDER BY id DESC`
+
+	rows, err := d.mysql.db.QueryContext(ctx, query)
+	if err != nil {
+		log.Error(ctx, "UserDAO.ListAll: 查询失败 err=%v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		user := &User{}
+		var phone, email sql.NullString
+		err := rows.Scan(
+			&user.ID, &user.Username, &user.Password, &user.Nickname, &phone, &email,
+			&user.Role, &user.Status, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			log.Error(ctx, "UserDAO.ListAll: 扫描失败 err=%v", err)
+			return nil, err
+		}
+		user.Phone = nullStringValue(phone)
+		user.Email = nullStringValue(email)
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+// UpdateRole 更新用户角色
+func (d *UserDAO) UpdateRole(ctx context.Context, userID int64, role string) error {
+	query := `UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?`
+	_, err := d.mysql.db.ExecContext(ctx, query, role, userID)
+	if err != nil {
+		log.Error(ctx, "UserDAO.UpdateRole: 更新失败 userID=%d, role=%s, err=%v", userID, role, err)
+		return err
+	}
+	log.Info(ctx, "UserDAO.UpdateRole: 角色更新成功 userID=%d, role=%s", userID, role)
+	return nil
+}
+
+// UpdateStatus 更新用户状态
+func (d *UserDAO) UpdateStatus(ctx context.Context, userID int64, status int) error {
+	query := `UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?`
+	_, err := d.mysql.db.ExecContext(ctx, query, status, userID)
+	if err != nil {
+		log.Error(ctx, "UserDAO.UpdateStatus: 更新失败 userID=%d, status=%d, err=%v", userID, status, err)
+		return err
+	}
+	log.Info(ctx, "UserDAO.UpdateStatus: 状态更新成功 userID=%d, status=%d", userID, status)
+	return nil
+}

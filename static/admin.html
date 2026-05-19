@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理 - Agent</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <div id="app">
+        <header class="admin-header">
+            <div class="header-left">
+                <h1>后台管理</h1>
+            </div>
+            <div class="header-right">
+                <a href="/" class="back-btn">返回主页</a>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </header>
+        
+        <main class="admin-main">
+            <h2>用户管理</h2>
+            <div class="table-container">
+                <table id="user-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>用户名</th>
+                            <th>昵称</th>
+                            <th>邮箱</th>
+                            <th>角色</th>
+                            <th>状态</th>
+                            <th>注册时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // 检查登录态
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+        
+        // 获取用户信息并验证权限
+        fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.errno !== 0 || !data.data || data.data.role !== 'admin') {
+                alert('无权限访问');
+                window.location.href = '/';
+                return;
+            }
+            loadUsers();
+        })
+        .catch(err => {
+            console.error('验证权限失败:', err);
+            window.location.href = '/login.html';
+        });
+        
+        // 加载用户列表
+        function loadUsers() {
+            fetch('/api/admin/users', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.errno === 0) {
+                    renderUsers(data.data);
+                }
+            })
+            .catch(err => {
+                console.error('加载用户列表失败:', err);
+                document.getElementById('user-tbody').innerHTML = 
+                    '<tr><td colspan="7" style="text-align: center; color: red;">加载失败</td></tr>';
+            });
+        }
+        
+        // 渲染用户列表
+        function renderUsers(users) {
+            const tbody = document.getElementById('user-tbody');
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">暂无用户</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = users.map(u => `
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${escapeHtml(u.username)}</td>
+                    <td>${escapeHtml(u.nickname) || '-'}</td>
+                    <td>${escapeHtml(u.email) || '-'}</td>
+                    <td>
+                        <select class="role-select" data-id="${u.id}" onchange="updateRole(${u.id}, this.value)">
+                            <option value="user" ${u.role === 'user' ? 'selected' : ''}>普通用户</option>
+                            <option value="vip" ${u.role === 'vip' ? 'selected' : ''}>VIP用户</option>
+                            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理员</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="status-select" data-id="${u.id}" onchange="updateStatus(${u.id}, this.value)">
+                            <option value="1" ${u.status === 1 ? 'selected' : ''}>正常</option>
+                            <option value="-1" ${u.status === -1 ? 'selected' : ''}>已删除</option>
+                        </select>
+                    </td>
+                    <td>${formatTime(u.created_at)}</td>
+                </tr>
+            `).join('');
+        }
+        
+        // 更新用户角色
+        function updateRole(userId, role) {
+            fetch(`/api/admin/users/${userId}/role`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ role: role })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.errno === 0) {
+                    showToast('角色更新成功');
+                } else {
+                    showToast(data.errmsg || '更新失败', 'error');
+                    loadUsers(); // 重新加载以恢复原值
+                }
+            })
+            .catch(err => {
+                console.error('更新角色失败:', err);
+                showToast('更新失败', 'error');
+                loadUsers();
+            });
+        }
+        
+        // 更新用户状态
+        function updateStatus(userId, status) {
+            fetch(`/api/admin/users/${userId}/status`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: parseInt(status) })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.errno === 0) {
+                    showToast('状态更新成功');
+                } else {
+                    showToast(data.errmsg || '更新失败', 'error');
+                    loadUsers();
+                }
+            })
+            .catch(err => {
+                console.error('更新状态失败:', err);
+                showToast('更新失败', 'error');
+                loadUsers();
+            });
+        }
+        
+        // HTML 转义
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#039;');
+        }
+        
+        // 格式化时间
+        function formatTime(t) {
+            if (!t) return '-';
+            const date = new Date(t);
+            return date.toLocaleString('zh-CN');
+        }
+        
+        // 显示提示
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 2000);
+        }
+        
+        // 登出
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        }
+    </script>
+</body>
+</html>

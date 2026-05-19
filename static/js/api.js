@@ -5,12 +5,44 @@
 const API_BASE_URL = '/api';
 
 /**
- * 基础 HTTP 请求
+ * 判断错误是否可重试
+ * @param {Error} error - 错误对象
+ * @returns {boolean} 是否可重试
+ */
+function isRetryableError(error) {
+    // 网络断开
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return true;
+    }
+    // 超时
+    if (error.name === 'AbortError') {
+        return true;
+    }
+    // 网络错误
+    if (error.message.includes('network') || error.message.includes('Network')) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 延迟函数
+ * @param {number} ms - 毫秒
+ */
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 基础 HTTP 请求（带重试机制）
  * @param {string} endpoint - API 端点
  * @param {Object} options - 请求选项
+ * @param {number} retryOptions.maxRetries - 最大重试次数（默认3次）
+ * @param {number} retryOptions.retryDelay - 重试延迟毫秒（默认1000ms）
  * @returns {Promise<Object>} API 响应
  */
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, retryOptions = {}) {
+    const { maxRetries = 3, retryDelay = 1000 } = retryOptions;
     const url = `${API_BASE_URL}${endpoint}`;
     
     // 获取 token
@@ -21,7 +53,7 @@ async function request(endpoint, options = {}) {
         headers: {
             'Content-Type': 'application/json'
         },
-        timeout: 300000
+        timeout: 300000 // 5分钟超时
     };
     
     // 添加 Authorization 头
@@ -36,61 +68,80 @@ async function request(endpoint, options = {}) {
         config.headers = { ...defaultOptions.headers, ...options.headers };
     }
     
-    try {
-        // 添加超时控制
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), config.timeout);
-        
-        const response = await fetch(url, {
-            ...config,
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        // 检查 HTTP 状态
-        if (!response.ok) {
-            // 401 表示未授权，跳转到登录页
-            if (response.status === 401) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                window.location.href = '/login.html';
-                throw new Error('登录已过期，请重新登录');
+    let lastError = null;
+    
+    // 重试循环
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            // 添加超时控制
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), config.timeout);
+            
+            const response = await fetch(url, {
+                ...config,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // 检查 HTTP 状态
+            if (!response.ok) {
+                // 401 表示未授权，跳转到登录页
+                if (response.status === 401) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    window.location.href = '/login.html';
+                    throw new Error('登录已过期，请重新登录');
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            
+            const data = await response.json();
+
+            // 检查业务状态码（errno === 0 表示成功）
+            if (data.errno !== 0) {
+                throw new Error(data.errmsg || '请求失败');
+            }
+
+            return data;
+        } catch (error) {
+            lastError = error;
+            
+            // 超时错误
+            if (error.name === 'AbortError') {
+                error.message = '请求超时，请检查网络连接';
+            }
+            
+            // 判断是否可重试
+            if (attempt < maxRetries && isRetryableError(error)) {
+                console.log(`[API] 请求失败，第 ${attempt + 1} 次重试...`, error.message);
+                await delay(retryDelay * (attempt + 1)); // 递增延迟
+                continue;
+            }
+            
+            throw error;
         }
-        
-        const data = await response.json();
-        
-        // 检查业务状态码
-        if (data.code && data.code !== 1000) {
-            throw new Error(data.message || '请求失败');
-        }
-        
-        return data;
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            throw new Error('请求超时，请检查网络连接');
-        }
-        throw error;
     }
+    
+    throw lastError;
 }
 
 /**
- * 聊天 API
+ * 聊天 API（带自动重试）
  */
 export const chatAPI = {
     /**
      * 发送聊天消息
      * @param {string} message - 消息内容
      * @param {Array} history - 消息历史
+     * @param {Object} retryOptions - 重试选项
      * @returns {Promise<Object>} 响应数据
      */
-    async send(message, history = []) {
+    async send(message, history = [], retryOptions = { maxRetries: 2, retryDelay: 500 }) {
         const response = await request('/chat', {
             method: 'POST',
             body: JSON.stringify({ message, history })
-        });
+        }, retryOptions);
         
         return response.data || response;
     }
@@ -122,10 +173,16 @@ export const filesAPI = {
         const formData = new FormData();
         formData.append('file', file);
         
+        const token = localStorage.getItem('token');
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`${API_BASE_URL}/upload`, {
             method: 'POST',
-            body: formData,
-            timeout: 60000
+            headers,
+            body: formData
         });
         
         if (!response.ok) {
@@ -133,11 +190,11 @@ export const filesAPI = {
         }
         
         const data = await response.json();
-        
-        if (data.code !== 1000) {
-            throw new Error(data.message || '上传失败');
+
+        if (data.errno !== 0) {
+            throw new Error(data.errmsg || '上传失败');
         }
-        
+
         return data.data || data;
     },
     
@@ -157,7 +214,7 @@ export const filesAPI = {
      */
     async delete(filename) {
         const response = await request(`/file/delete?filename=${encodeURIComponent(filename)}`, {
-            method: 'DELETE'
+            method: 'POST'
         });
         
         return response.data || response;
@@ -196,6 +253,11 @@ export const errorHandler = {
             return error.message;
         }
         
+        // 频率限制
+        if (error.message.includes('频繁') || error.message.includes('等待')) {
+            return error.message;
+        }
+        
         // 其他错误
         return error.message || '发生错误，请重试';
     },
@@ -209,31 +271,8 @@ export const errorHandler = {
         const timestamp = new Date().toISOString();
         const message = `[${timestamp}] ${context}: ${error.message}`;
         console.error(message, error);
-        
-        // 可以在这里添加远程错误上报
-        // this.reportToServer(message, error);
     }
 };
-
-/**
- * 重试机制
- */
-export function withRetry(fn, maxAttempts = 3, delay = 1000) {
-    return async function retriedFn(...args) {
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                return await fn(...args);
-            } catch (error) {
-                if (attempt === maxAttempts) {
-                    throw error;
-                }
-                
-                // 等待后重试
-                await new Promise(resolve => setTimeout(resolve, delay * attempt));
-            }
-        }
-    };
-}
 
 /**
  * 检查 API 可用性
@@ -241,7 +280,7 @@ export function withRetry(fn, maxAttempts = 3, delay = 1000) {
  */
 export async function checkAPIHealth() {
     try {
-        const response = await fetch('/api/files', { timeout: 5000 });
+        const response = await fetch('/api/files');
         return response.ok;
     } catch (error) {
         return false;
@@ -255,6 +294,5 @@ export default {
     chat: chatAPI,
     files: filesAPI,
     errorHandler,
-    withRetry,
     checkAPIHealth
 };

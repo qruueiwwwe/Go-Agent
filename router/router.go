@@ -17,6 +17,7 @@ type Router struct {
 	internal       *InternalRouter
 	staticFS       fs.FS // 静态文件系统（可选，用于嵌入模式）
 	authCtrl       *controllers.AuthController
+	adminCtrl      *controllers.AdminController
 	authMiddleware func(http.HandlerFunc) http.HandlerFunc
 }
 
@@ -36,6 +37,11 @@ func (r *Router) SetAuth(authCtrl *controllers.AuthController, authSvc *auth.Aut
 	r.authMiddleware = func(next http.HandlerFunc) http.HandlerFunc {
 		return AuthMiddleware(authSvc, next)
 	}
+}
+
+// SetAdmin 设置后台管理控制器
+func (r *Router) SetAdmin(adminCtrl *controllers.AdminController) {
+	r.adminCtrl = adminCtrl
 }
 
 // SetStaticFS 设置静态文件系统（用于嵌入模式）
@@ -63,7 +69,7 @@ func (r *Router) RegisterRoutes(mux *http.ServeMux) {
 
 // handleChat 处理聊天请求
 func (r *Router) handleChat(w http.ResponseWriter, rq *http.Request) {
-	ctx := context.Background()
+	ctx := rq.Context() // 使用请求的 context，包含中间件存入的用户信息
 	r.chatCtrl.Chat(ctx, w, rq)
 }
 

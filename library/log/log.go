@@ -76,9 +76,38 @@ func getLogFileName() string {
 	return filepath.Join(config.Path, fmt.Sprintf("agent_%s.log", now.Format("2006-01-02")))
 }
 
-// GenerateLogID 生成日志ID
+// GenerateLogID 生成日志ID（无用户信息时使用）
+// 格式：时间戳后5位 + 00000 + G = 11位
 func GenerateLogID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	timestamp := time.Now().UnixNano() % 100000
+	return fmt.Sprintf("%05d00000G", timestamp)
+}
+
+// GenerateLogIDWithUser 根据用户信息生成日志ID
+// 格式：时间戳后5位 + 用户ID后5位 + 角色首字符
+// 示例：1234500001U（时间戳后5位 + 用户ID 1 + user角色）
+// 总长度固定11位
+func GenerateLogIDWithUser(claims interface{}) string {
+	timestamp := time.Now().UnixNano() % 100000 // 时间戳后5位
+
+	var userID int64 = 0
+	var roleByte byte = 'G' // Guest，未登录用户
+
+	if claims != nil {
+		if c, ok := claims.(interface{ GetUserID() int64; GetRole() string }); ok {
+			userID = c.GetUserID()
+			role := c.GetRole()
+			if len(role) > 0 {
+				roleByte = role[0]
+				if roleByte >= 'a' && roleByte <= 'z' {
+					roleByte -= 32 // 转大写
+				}
+			}
+		}
+	}
+
+	// 格式：时间戳(5位) + 用户ID(5位) + 角色首字符(1位) = 11位
+	return fmt.Sprintf("%05d%05d%c", timestamp, userID%100000, roleByte)
 }
 
 // WithContext 创建带日志ID的上下文
