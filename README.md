@@ -4,6 +4,13 @@
 
 ## 核心功能
 
+### 用户认证与账号安全（新增）
+- **邮箱验证码注册**：通过邮箱 + 验证码完成注册
+- **手机号可选**：注册时手机号非必填，可为空
+- **登录认证**：用户名密码登录，返回 JWT Token
+- **忘记密码**：通过邮箱验证码重置密码
+- **权限校验**：主页与 API 支持登录态校验
+
 ### 大模型服务
 - **Ollama 本地模型**：主要使用本地 Ollama 服务（默认 gemma3:4b）
 - **智谱清言后备**：当 Ollama 不可用时，自动切换到智谱清言云端API
@@ -106,6 +113,8 @@ cp .env.example .env
 # - WEATHER_API_ID/KEY：接口盒子天气API
 # - AMAP_API_KEY：高德天气API
 # - DATABASE_PASSWORD：MySQL密码
+# - JWT_SECRET：登录签名密钥
+# - MAIL_SMTP_*：邮箱验证码SMTP配置
 ```
 
 3. **安装依赖**
@@ -171,6 +180,21 @@ AMAP_API_KEY=your_amap_api_key
 
 # 数据库配置
 DATABASE_PASSWORD=your_db_password
+
+# JWT 配置
+JWT_SECRET=your_super_secret_jwt_key
+
+# 邮箱验证码 SMTP 配置
+MAIL_SMTP_HOST=smtp.qq.com
+MAIL_SMTP_PORT=465
+MAIL_USERNAME=your_email@qq.com
+MAIL_PASSWORD=your_smtp_auth_code
+MAIL_FROM_NAME=Agent验证码
+MAIL_FROM_ADDR=your_email@qq.com
+
+# 开发环境配置
+APP_ENV=dev
+EMAIL_DEBUG_FIXED_CODE=
 ```
 
 **注意**：`.env` 文件已被 `.gitignore` 忽略，不会提交到代码仓库。
@@ -179,6 +203,11 @@ DATABASE_PASSWORD=your_db_password
 
 ### Web 界面
 访问 `http://localhost:25565` 打开前端 Web 界面
+
+**登录注册相关页面：**
+- 登录页：`/login.html`
+- 邮箱注册页：`/register.html`
+- 忘记密码页：`/forgot-password.html`
 
 **功能包括：**
 - 聊天对话框
@@ -231,6 +260,44 @@ Content-Type: application/json
 
 {
   "filename": "example.txt"
+}
+```
+
+#### 5. 发送邮箱验证码
+```bash
+POST /api/auth/email/send
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "scene": "register"
+}
+```
+
+#### 6. 邮箱验证码注册（手机号可选）
+```bash
+POST /api/auth/register-by-email
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "1234",
+  "username": "testuser",
+  "password": "password123",
+  "nickname": "测试用户",
+  "phone": ""
+}
+```
+
+#### 7. 邮箱验证码重置密码
+```bash
+POST /api/auth/password/reset-by-email
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "1234",
+  "new_password": "newpass123"
 }
 ```
 
@@ -313,6 +380,8 @@ agent/
 - 默认本地访问（可配置 CORS）
 - 请求超时保护
 - 错误信息隐藏敏感信息
+- 登录态使用 JWT 校验
+- 邮箱验证码包含过期时间、尝试次数与使用状态控制
 
 ## 故障排除
 
