@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"agent/global"
 	"agent/library/log"
 	"agent/models/dao"
 	"agent/models/service/agent"
+	authService "agent/models/service/auth"
 	"agent/models/service/calculator"
 	"agent/models/service/nbnhhsh"
 	"agent/models/service/weather"
@@ -150,6 +152,32 @@ func main() {
 		// MySQL 失败不阻止服务启动，只是nbnhhsh功能不可用
 	} else {
 		log.Info(ctx, "MySQL 初始化成功")
+
+		// 执行数据库迁移
+		if err := mysql.AutoMigrate(ctx); err != nil {
+			log.Error(ctx, "数据库迁移失败: %v", err)
+		}
+	}
+
+	// 初始化认证服务
+	var authCtrl *controllers.AuthController
+	var authSvc *authService.AuthService
+	if mysql != nil {
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			jwtSecret = "default-secret-key-please-change-in-production"
+			log.Warn(ctx, "JWT_SECRET 未设置，使用默认密钥（不安全！）")
+		}
+		userDAO := dao.NewUserDAO(mysql)
+		smsCodeDAO := dao.NewSMSCodeDAO(mysql)
+		smsSvc := authService.NewSMSService(smsCodeDAO)
+		emailCodeDAO := dao.NewEmailCodeDAO(mysql)
+		emailSvc := authService.NewEmailService(emailCodeDAO)
+		authSvc = authService.NewAuthService(userDAO, smsCodeDAO, smsSvc, emailCodeDAO, emailSvc, jwtSecret, 24*time.Hour)
+		authCtrl = controllers.NewAuthController(authSvc, smsSvc, emailSvc)
+		log.Info(ctx, "认证服务初始化完成")
+	} else {
+		log.Warn(ctx, "MySQL 不可用，认证服务未启用")
 	}
 
 	// 初始化工具管理器
@@ -179,6 +207,9 @@ func main() {
 	// 初始化路由
 	r := router.NewRouter(chatCtrl, toolCtrl)
 	r.SetStaticFS(StaticFS()) // 使用嵌入的静态文件
+	if authCtrl != nil && authSvc != nil {
+		r.SetAuth(authCtrl, authSvc)
+	}
 	mux := http.NewServeMux()
 	r.RegisterRoutes(mux)
 

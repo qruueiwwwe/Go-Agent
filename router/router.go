@@ -5,16 +5,19 @@ import (
 	"io/fs"
 	"net/http"
 
+	"agent/models/service/auth"
 	"agent/webapi/controllers"
 )
 
 // Router 路由结构
 type Router struct {
-	chatCtrl   *controllers.ChatController
-	healthCtrl *controllers.HealthController
-	fileCtrl   *controllers.FileUploadController
-	internal   *InternalRouter
-	staticFS   fs.FS // 静态文件系统（可选，用于嵌入模式）
+	chatCtrl       *controllers.ChatController
+	healthCtrl     *controllers.HealthController
+	fileCtrl       *controllers.FileUploadController
+	internal       *InternalRouter
+	staticFS       fs.FS // 静态文件系统（可选，用于嵌入模式）
+	authCtrl       *controllers.AuthController
+	authMiddleware func(http.HandlerFunc) http.HandlerFunc
 }
 
 // NewRouter 创建路由
@@ -24,6 +27,14 @@ func NewRouter(chatCtrl *controllers.ChatController, toolCtrl *controllers.ToolC
 		healthCtrl: controllers.NewHealthController(),
 		fileCtrl:   controllers.NewFileUploadController(),
 		internal:   NewInternalRouter(toolCtrl),
+	}
+}
+
+// SetAuth 设置认证控制器和中间件
+func (r *Router) SetAuth(authCtrl *controllers.AuthController, authSvc *auth.AuthService) {
+	r.authCtrl = authCtrl
+	r.authMiddleware = func(next http.HandlerFunc) http.HandlerFunc {
+		return AuthMiddleware(authSvc, next)
 	}
 }
 

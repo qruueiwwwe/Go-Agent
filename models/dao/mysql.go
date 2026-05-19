@@ -44,6 +44,63 @@ func (m *MySQL) Close() error {
 	return m.db.Close()
 }
 
+// DB 获取底层数据库连接
+func (m *MySQL) DB() *sql.DB {
+	return m.db
+}
+
+// AutoMigrate 自动迁移数据库表
+func (m *MySQL) AutoMigrate(ctx context.Context) error {
+	// 创建用户表
+	createUserTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
+		password VARCHAR(255) NOT NULL COMMENT '密码(bcrypt加密)',
+		nickname VARCHAR(100) COMMENT '昵称',
+		phone VARCHAR(20) UNIQUE NULL COMMENT '手机号',
+		email VARCHAR(255) UNIQUE NULL COMMENT '邮箱',
+		role VARCHAR(20) DEFAULT 'user' COMMENT '角色: admin/user',
+		status TINYINT DEFAULT 1 COMMENT '状态: 1-正常 0-禁用',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		INDEX idx_username (username),
+		INDEX idx_phone (phone),
+		INDEX idx_email (email)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+	`
+
+	_, err := m.db.ExecContext(ctx, createUserTable)
+	if err != nil {
+		log.Error(ctx, "AutoMigrate: 创建用户表失败 err=%v", err)
+		return fmt.Errorf("创建用户表失败: %v", err)
+	}
+
+	createEmailCodeTable := `
+	CREATE TABLE IF NOT EXISTS email_codes (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		email VARCHAR(255) NOT NULL COMMENT '邮箱',
+		scene VARCHAR(32) NOT NULL COMMENT '场景: register/reset_password',
+		code VARCHAR(6) NOT NULL COMMENT '验证码',
+		expired_at DATETIME NOT NULL COMMENT '过期时间',
+		used TINYINT DEFAULT 0 COMMENT '是否已使用',
+		attempts INT DEFAULT 0 COMMENT '尝试次数',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_email_scene (email, scene),
+		INDEX idx_expired_at (expired_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱验证码表';
+	`
+
+	_, err = m.db.ExecContext(ctx, createEmailCodeTable)
+	if err != nil {
+		log.Error(ctx, "AutoMigrate: 创建邮箱验证码表失败 err=%v", err)
+		return fmt.Errorf("创建邮箱验证码表失败: %v", err)
+	}
+
+	log.Info(ctx, "AutoMigrate: 用户表与邮箱验证码表迁移完成")
+	return nil
+}
+
 // NbnhhshDAO 缩写词猜测数据访问
 type NbnhhshDAO struct {
 	mysql *MySQL

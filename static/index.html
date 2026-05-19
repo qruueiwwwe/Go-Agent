@@ -43,6 +43,16 @@
     <!-- XSS 防护 -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     
+    <!-- 登录检查 -->
+    <script>
+        // 检查是否已登录
+        const token = localStorage.getItem('token');
+        if (!token) {
+            // 未登录，跳转到登录页
+            window.location.href = '/login.html';
+        }
+    </script>
+    
     <!-- 应用入口 -->
     <script type="module">
         // 导入应用
@@ -54,6 +64,29 @@
         // 调试信息
         console.log('✓ 智能助手应用已启动');
         console.log('✓ Vue 版本:', Vue.version);
+    </script>
+    
+    <!-- 全局登出函数 -->
+    <script>
+        // 登出函数
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        }
+        
+        // 获取当前用户信息
+        function getCurrentUser() {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+                try {
+                    return JSON.parse(userStr);
+                } catch (e) {
+                    return null;
+                }
+            }
+            return null;
+        }
     </script>
 </body>
 </html>

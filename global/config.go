@@ -13,6 +13,7 @@ type Config struct {
 	Redis      RedisConfig
 	WeatherAPI WeatherAPIConfig
 	Zhipu      ZhipuConfig
+	JWT        JWTConfig
 }
 
 // ServerConfig 服务配置
@@ -80,6 +81,12 @@ type ZhipuConfig struct {
 	Enable      bool          // 是否启用后备
 }
 
+// JWTConfig JWT 配置
+type JWTConfig struct {
+	Secret     string        // JWT 密钥（从环境变量读取）
+	ExpireTime time.Duration // Token 有效期
+}
+
 // DefaultConfig 默认配置
 var DefaultConfig = Config{
 	Server: ServerConfig{
@@ -132,5 +139,9 @@ var DefaultConfig = Config{
 		Timeout:     60 * time.Second,
 		Temperature: 0.3,
 		Enable:      true,
+	},
+	JWT: JWTConfig{
+		Secret:     "", // 从环境变量 JWT_SECRET 读取
+		ExpireTime: 24 * time.Hour,
 	},
 }

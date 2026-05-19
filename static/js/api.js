@@ -12,6 +12,10 @@ const API_BASE_URL = '/api';
  */
 async function request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    
+    // 获取 token
+    const token = localStorage.getItem('token');
+    
     const defaultOptions = {
         method: 'GET',
         headers: {
@@ -20,7 +24,17 @@ async function request(endpoint, options = {}) {
         timeout: 300000
     };
     
+    // 添加 Authorization 头
+    if (token) {
+        defaultOptions.headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const config = { ...defaultOptions, ...options };
+    
+    // 合并 headers
+    if (options.headers) {
+        config.headers = { ...defaultOptions.headers, ...options.headers };
+    }
     
     try {
         // 添加超时控制
@@ -36,6 +50,13 @@ async function request(endpoint, options = {}) {
         
         // 检查 HTTP 状态
         if (!response.ok) {
+            // 401 表示未授权，跳转到登录页
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/login.html';
+                throw new Error('登录已过期，请重新登录');
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
