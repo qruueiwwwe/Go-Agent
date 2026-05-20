@@ -251,8 +251,8 @@ func (c *AuthController) RegisterByEmail(ctx context.Context, w http.ResponseWri
 		Reply(w, 404, "参数错误", nil, logid)
 		return
 	}
-	log.Info(ctx, "RegisterByEmail: 收到注册请求 email=%s code=%s username=%s passwordLen=%d nickname=%s phone=%s",
-		req.Email, req.Code, req.Username, len(req.Password), req.Nickname, req.Phone)
+	log.Info(ctx, "RegisterByEmail: 收到注册请求 email=%s code=%s username=%s passwordLen=%s nickname=%s phone=%s",
+		req.Email, req.Code, req.Username, req.Password, req.Nickname, req.Phone)
 	if req.Email == "" || req.Code == "" || req.Username == "" || req.Password == "" {
 		Reply(w, 404, "缺少必要参数", nil, logid)
 		return

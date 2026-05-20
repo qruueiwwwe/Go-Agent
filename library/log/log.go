@@ -94,7 +94,10 @@ func GenerateLogIDWithUser(claims interface{}) string {
 	var roleByte byte = 'G' // Guest，未登录用户
 
 	if claims != nil {
-		if c, ok := claims.(interface{ GetUserID() int64; GetRole() string }); ok {
+		if c, ok := claims.(interface {
+			GetUserID() int64
+			GetRole() string
+		}); ok {
 			userID = c.GetUserID()
 			role := c.GetRole()
 			if len(role) > 0 {
