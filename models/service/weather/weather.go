@@ -39,16 +39,37 @@ func (w *Weather) Description() string {
 func (w *Weather) Execute(ctx context.Context, input string) string {
 	log.Info(ctx, "Weather.Execute: 入参 input=%s", input)
 
-	// 解析城市和天数
-	city, days := parseWeatherInput(input)
-	if city == "" {
-		city = input
-		days = 1
+	normalizedInput := normalizeWeatherSentence(input)
+	cities := extractCities(normalizedInput)
+	_, days := parseWeatherInput(input)
+
+	if len(cities) == 0 {
+		city, parsedDays := parseWeatherInput(normalizedInput)
+		if city == "" {
+			city = normalizedInput
+		}
+		if parsedDays > 0 {
+			days = parsedDays
+		}
+		if city == "" {
+			return "请明确要查询的城市，例如：北京今天、西安明天。"
+		}
+		cities = []string{city}
 	}
 
-	log.Info(ctx, "Weather.Execute: 解析结果 city=%s, days=%d", city, days)
+	if len(cities) == 1 {
+		return w.querySingleCity(ctx, cities[0], days)
+	}
 
-	// 优先调用接口盒子API（中国气象局数据）
+	results := make([]string, 0, len(cities))
+	for _, city := range cities {
+		results = append(results, w.querySingleCity(ctx, city, days))
+	}
+	return strings.Join(results, "\n\n")
+}
+
+func (w *Weather) querySingleCity(ctx context.Context, city string, days int) string {
+	log.Info(ctx, "Weather.Execute: 解析结果 city=%s, days=%d", city, days)
 	result, err := w.getWeatherFromAPIHZ(ctx, city, days)
 	if err == nil {
 		log.Info(ctx, "Weather.Execute: 接口盒子查询成功 city=%s", city)
@@ -56,8 +77,6 @@ func (w *Weather) Execute(ctx context.Context, input string) string {
 	}
 
 	log.Error(ctx, "Weather.Execute: 接口盒子查询失败 city=%s, err=%v", city, err)
-
-	// 接口盒子失败，尝试高德天气API
 	result, err = w.getWeatherFromAmap(ctx, city, days)
 	if err == nil {
 		log.Info(ctx, "Weather.Execute: 高德API查询成功 city=%s", city)
@@ -65,9 +84,42 @@ func (w *Weather) Execute(ctx context.Context, input string) string {
 	}
 
 	log.Error(ctx, "Weather.Execute: 高德API查询失败 city=%s, err=%v", city, err)
-
-	// 两个都失败
 	return fmt.Sprintf("查询「%s」天气失败：%s", city, err.Error())
+}
+
+func normalizeWeatherSentence(input string) string {
+	s := strings.TrimSpace(strings.ReplaceAll(input, " ", ""))
+	replacements := []string{"请问", "帮我", "查一下", "告诉我", "天气", "怎么样", "如何", "相比", "对比", "哪个", "哪个更", "更", "吗", "呢", "？", "?", "的"}
+	for _, r := range replacements {
+		s = strings.ReplaceAll(s, r, "")
+	}
+	return s
+}
+
+func extractCities(input string) []string {
+	if input == "" {
+		return nil
+	}
+	seps := []string{"和", "与", "、", ",", "，"}
+	s := input
+	for _, sep := range seps {
+		s = strings.ReplaceAll(s, sep, "|")
+	}
+	parts := strings.Split(s, "|")
+	cities := make([]string, 0, len(parts))
+	seen := map[string]bool{}
+	for _, p := range parts {
+		c, _ := parseWeatherInput(p)
+		if c == "" {
+			c = strings.TrimSpace(p)
+		}
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		cities = append(cities, c)
+	}
+	return cities
 }
 
 // parseWeatherInput 解析输入，提取城市和天数

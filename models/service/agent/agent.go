@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"agent/library/log"
@@ -32,22 +33,37 @@ func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManag
 3. 文件操作：用户需要解析/分析文件时，使用 file 工具
 4. 缩写词猜测：用户问字母缩写/网络用语的含义时，使用 nbnhhsh 工具
 
-【重要】
-- 先判断用户意图，再决定是否需要工具
-- 如果用知识库能回答的问题，直接回答，不必调用工具
-- 只有需要实时数据或外部资源时才调用工具
+	【重要】
+	- 先判断用户意图，再决定是否需要工具
+	- 如果用知识库能回答的问题，直接回答，不必调用工具
+	- 只有需要实时数据或外部资源时才调用工具
 
-【调用工具时的格式】
-{"tool":"工具名","input":"参数"}
+	【天气任务专用规则（强制）】
+	1. 涉及天气比较（如“北京和西安相比”“哪个更热”）时，必须先拆分城市，再分别调用 weather 查询。
+	2. weather 工具 input 只允许“单城市名 + 可选时间词”（如“北京今天”“西安明天”），禁止传整句自然语言。
+	3. 禁止把比较词或问句词传给 weather：和、相比、怎么样、哪个、哪个更、对比。
+	4. 多城市比较时，先分别查询每个城市天气，再输出结构化对比结论。
+	5. 城市不明确时先追问澄清，不要盲目调用 weather。
 
-示例：
-- 天气：{"tool":"weather","input":"北京"}
-- 计算：{"tool":"calculator","input":"1+2"}
-- 缩写词：{"tool":"nbnhhsh","input":"yyds"}
+	【调用工具时的格式】
+	{"tool":"工具名","input":"参数"}
 
-【工具返回后】
-- 直接把工具返回的原始结果返回给用户
-- 原样返回结果，不做修改
+	示例：
+	- 天气：{"tool":"weather","input":"北京"}
+	- 计算：{"tool":"calculator","input":"1+2"}
+	- 缩写词：{"tool":"nbnhhsh","input":"yyds"}
+	- 天气比较（今天北京和西安相比怎么样）：
+	  1) {"tool":"weather","input":"北京今天"}
+	  2) {"tool":"weather","input":"西安今天"}
+	  3) 根据两次结果输出对比结论
+	- 天气比较（上海和杭州明天哪个更热）：
+	  1) {"tool":"weather","input":"上海明天"}
+	  2) {"tool":"weather","input":"杭州明天"}
+	- 城市不明确（“今天和明天哪个城市更冷”）：先追问城市，不调用 weather
+
+	【工具返回后】
+	- 单工具场景：忠实返回工具事实，不编造数据。
+	- 多次工具调用场景（如天气对比）：允许基于工具结果做结构化总结（天气/温度/风力/湿度）。
 `
 	maxChars, maxMsgs := getContextBudget(budgetMode)
 	return &AgentService{
@@ -113,22 +129,21 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 	} else if s.ollamaSvc != nil {
 		toolName, toolInput, isToolCall = s.ollamaSvc.ParseToolCall(resp)
 	}
+	if !isToolCall {
+		toolName, toolInput, isToolCall = ParseToolCallFromResponse(resp)
+	}
 
 	if isToolCall {
 		log.Info(ctx, "调用工具: %s, 参数: %s", toolName, toolInput)
-
-		// 执行工具
-		result := s.toolManager.Execute(ctx, toolName, toolInput)
+		result := s.executeToolAndSummarize(ctx, userMessage, toolName, toolInput)
 		log.Info(ctx, "工具执行结果: %s", result)
-
-		// 直接返回工具结果
 		return result
 	}
 
 	// 强制工具调用检测：当大模型未遵循指令时
 	if forceToolName, forceToolInput, shouldForce := s.shouldForceToolCall(userMessage, resp); shouldForce {
 		log.Info(ctx, "强制调用工具（大模型未遵循指令）: %s, 参数: %s", forceToolName, forceToolInput)
-		result := s.toolManager.Execute(ctx, forceToolName, forceToolInput)
+		result := s.executeToolAndSummarize(ctx, userMessage, forceToolName, forceToolInput)
 		log.Info(ctx, "工具执行结果: %s", result)
 		return result
 	}
@@ -139,7 +154,7 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 		toolName, toolInput, shouldCallTool := s.inferToolCall(userMessage)
 		if shouldCallTool {
 			log.Info(ctx, "使用降级策略调用工具: %s, 参数: %s", toolName, toolInput)
-			result := s.toolManager.Execute(ctx, toolName, toolInput)
+			result := s.executeToolAndSummarize(ctx, userMessage, toolName, toolInput)
 			log.Info(ctx, "工具执行结果: %s", result)
 			return result
 		}
@@ -151,6 +166,10 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 // shouldForceToolCall 检测是否应该强制调用工具
 // 当用户问天气或缩写词含义但大模型没有调用工具却返回了答案时，强制调用工具
 func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, toolInput string, shouldCall bool) {
+	if _, _, ok := ParseToolCallFromResponse(resp); ok {
+		return "", "", false
+	}
+
 	// ========== 天气工具检测 ==========
 	weatherKeywords := []string{"天气", "几度", "温度", "气温", "下雨", "下雪", "晴", "阴", "多云"}
 	hasWeatherKeyword := false
@@ -167,8 +186,7 @@ func (s *AgentService) shouldForceToolCall(userMessage, resp string) (toolName, 
 		}
 		for _, pattern := range weatherResponsePatterns {
 			if strings.Contains(resp, pattern) {
-				city := extractCityFromMessage(userMessage)
-				return "weather", city, true
+				return "weather", userMessage, true
 			}
 		}
 	}
@@ -405,6 +423,107 @@ func convertToZhipuMessages(msgs []api.Message) []zhipuMessage {
 		}
 	}
 	return result
+}
+
+func (s *AgentService) executeToolAndSummarize(ctx context.Context, userMessage, toolName, toolInput string) string {
+	if toolName == "weather" {
+		cities := extractCandidateCities(toolInput)
+		if len(cities) == 0 {
+			normalized := normalizeWeatherInput(toolInput)
+			if normalized == "" {
+				return "请明确要查询的城市，例如：北京今天、西安明天。"
+			}
+			cities = []string{normalized}
+		}
+
+		results := make([]string, 0, len(cities))
+		for _, city := range cities {
+			query := city
+			if strings.Contains(toolInput, "明天") {
+				query = city + "明天"
+			} else if strings.Contains(toolInput, "后天") {
+				query = city + "后天"
+			} else if strings.Contains(toolInput, "七天") || strings.Contains(toolInput, "7天") {
+				query = city + "七天"
+			} else if strings.Contains(toolInput, "今天") {
+				query = city + "今天"
+			}
+			results = append(results, s.toolManager.Execute(ctx, "weather", query))
+		}
+
+		merged := strings.Join(results, "\n\n")
+		if len(results) > 1 {
+			if summary, ok := s.runModelSecondPass(ctx, userMessage, merged); ok {
+				return summary
+			}
+		}
+		return merged
+	}
+
+	result := s.toolManager.Execute(ctx, toolName, toolInput)
+	if summary, ok := s.runModelSecondPass(ctx, userMessage, result); ok {
+		return summary
+	}
+	return result
+}
+
+func (s *AgentService) runModelSecondPass(ctx context.Context, userMessage, toolResult string) (string, bool) {
+	prompt := fmt.Sprintf("用户问题：%s\n\n工具结果：%s\n\n请仅基于工具结果回答用户问题，禁止编造。若是对比问题，请给出结构化对比结论。", userMessage, toolResult)
+	msgs := []api.Message{
+		{Role: "system", Content: s.systemPrompt},
+		{Role: "user", Content: prompt},
+	}
+
+	if s.ollamaSvc != nil {
+		if resp, err := s.ollamaSvc.Chat(ctx, msgs); err == nil && strings.TrimSpace(resp) != "" {
+			return resp, true
+		}
+	}
+	if s.zhipuSvc != nil {
+		if resp, err := s.zhipuSvc.Chat(ctx, convertToZhipuMessages(msgs)); err == nil && strings.TrimSpace(resp) != "" {
+			return resp, true
+		}
+	}
+	return "", false
+}
+
+func normalizeWeatherInput(input string) string {
+	s := strings.TrimSpace(input)
+	replacements := []string{"天气", "今天", "明天", "后天", "七天", "7天", "一周", "未来", "怎么样", "如何", "相比", "对比", "哪个", "哪个更", "更", "吗", "呢", "？", "?"}
+	for _, r := range replacements {
+		s = strings.ReplaceAll(s, r, "")
+	}
+	s = strings.ReplaceAll(s, "和", " ")
+	s = strings.ReplaceAll(s, "与", " ")
+	parts := strings.Fields(s)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
+}
+
+func extractCandidateCities(input string) []string {
+	s := strings.TrimSpace(input)
+	replacements := []string{"天气", "今天", "明天", "后天", "七天", "7天", "一周", "未来", "怎么样", "如何", "相比", "对比", "哪个", "哪个更", "更", "吗", "呢", "？", "?", "的"}
+	for _, r := range replacements {
+		s = strings.ReplaceAll(s, r, "")
+	}
+	separators := []string{"和", "与", "、", ",", "，"}
+	for _, sep := range separators {
+		s = strings.ReplaceAll(s, sep, "|")
+	}
+	items := strings.Split(s, "|")
+	cities := make([]string, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		c := strings.TrimSpace(item)
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		cities = append(cities, c)
+	}
+	return cities
 }
 
 func getContextBudget(mode string) (int, int) {

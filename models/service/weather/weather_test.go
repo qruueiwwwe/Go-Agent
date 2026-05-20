@@ -156,6 +156,26 @@ func TestWeather_Execute_InvalidCity(t *testing.T) {
 	}
 }
 
+func TestNormalizeWeatherSentence(t *testing.T) {
+	got := normalizeWeatherSentence("今天北京的天气和西安相比，怎么样？")
+	if got == "" {
+		t.Fatal("normalizeWeatherSentence should not return empty")
+	}
+	if contains(got, "相比") || contains(got, "怎么样") || contains(got, "天气") {
+		t.Fatalf("normalizeWeatherSentence did not clean noise, got=%s", got)
+	}
+}
+
+func TestExtractCities(t *testing.T) {
+	cities := extractCities("北京和西安")
+	if len(cities) != 2 {
+		t.Fatalf("extractCities expected 2 cities, got %d (%v)", len(cities), cities)
+	}
+	if cities[0] != "北京" || cities[1] != "西安" {
+		t.Fatalf("extractCities unexpected result: %v", cities)
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
