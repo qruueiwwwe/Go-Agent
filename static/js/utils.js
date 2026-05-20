@@ -169,9 +169,30 @@ export function getQueryParam(name) {
  * @returns {Promise<boolean>} 是否复制成功
  */
 export async function copyToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (err) {
+            console.warn('Clipboard API 复制失败，尝试降级方案:', err);
+        }
+    }
+
     try {
-        await navigator.clipboard.writeText(text);
-        return true;
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return copied;
     } catch (err) {
         console.error('复制失败:', err);
         return false;

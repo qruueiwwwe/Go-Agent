@@ -5,7 +5,7 @@
 import { ChatWindow } from './components/ChatWindow.js';
 import { FileManager } from './components/FileManager.js';
 import { Settings } from './components/Settings.js';
-import { ToastContainer } from './components/Toast.js';
+import { ToastContainer, Toast } from './components/Toast.js';
 import API, { errorHandler } from './api.js';
 import { generateId, ThemeManager } from './utils.js';
 
@@ -54,7 +54,11 @@ const app = createApp({
             currentSessionId: null,
             
             // 当前主题
-            currentTheme: 'light'
+            currentTheme: 'light',
+
+            // 设置项
+            showTimestamp: localStorage.getItem('setting-timestamp') !== 'false',
+            soundEnabled: localStorage.getItem('setting-sound') === 'true'
         };
     },
     
@@ -71,13 +75,16 @@ const app = createApp({
         async initialize() {
             await this.loadFileList();
             this.initTheme();
+            this.loadSettings();
             this.loadSessions();
-            
-            // 添加欢迎消息
-            this.addMessage({
-                type: 'assistant',
-                content: '你好！我是智能助手，可以帮你查询天气、进行数学计算或处理文件。\n\n**你可以问我：**\n- 今天北京的天气怎么样？\n- 计算：123 + 456\n- 帮我分析这个文件\n\n有什么可以帮你的吗？'
-            });
+
+            // 仅在空会话时添加欢迎消息，避免污染恢复会话
+            if (this.messages.length === 0) {
+                this.addMessage({
+                    type: 'assistant',
+                    content: '你好！我是智能助手，可以帮你查询天气、进行数学计算或处理文件。\n\n**你可以问我：**\n- 今天北京的天气怎么样？\n- 计算：123 + 456\n- 帮我分析这个文件\n\n有什么可以帮你的吗？'
+                });
+            }
         },
         
         /**
@@ -88,6 +95,26 @@ const app = createApp({
             ThemeManager.onChange((theme) => {
                 this.currentTheme = theme;
             });
+        },
+
+        /**
+         * 读取设置项
+         */
+        loadSettings() {
+            this.showTimestamp = localStorage.getItem('setting-timestamp') !== 'false';
+            this.soundEnabled = localStorage.getItem('setting-sound') === 'true';
+        },
+
+        /**
+         * 从当前 messages 重建 history
+         */
+        rebuildHistoryFromMessages() {
+            this.history = this.messages
+                .filter(m => m.type === 'user' || m.type === 'assistant')
+                .map(m => ({
+                    role: m.type === 'user' ? 'user' : 'assistant',
+                    content: m.content
+                }));
         },
         
         /**
@@ -102,12 +129,12 @@ const app = createApp({
                     this.sessions = [];
                 }
             }
-            
-            // 如果没有会话，创建一个新会话
+
+            // 如果没有会话，创建一个新会话；否则恢复第一个会话的 messages/history
             if (this.sessions.length === 0) {
                 this.createNewSession();
             } else {
-                this.currentSessionId = this.sessions[0].id;
+                this.selectSession(this.sessions[0]);
             }
         },
         
@@ -143,13 +170,7 @@ const app = createApp({
         selectSession(session) {
             this.currentSessionId = session.id;
             this.messages = session.messages || [];
-            // 重建历史
-            this.history = this.messages
-                .filter(m => m.type === 'user' || m.type === 'assistant')
-                .map(m => ({
-                    role: m.type === 'user' ? 'user' : 'assistant',
-                    content: m.content
-                }));
+            this.rebuildHistoryFromMessages();
         },
         
         /**
@@ -224,9 +245,9 @@ const app = createApp({
                 content: messageData.content || '',
                 timestamp: Date.now()
             };
-            
+
             this.messages.push(message);
-            
+
             // 将消息加入历史
             if (message.type === 'user' || message.type === 'assistant') {
                 this.history.push({
@@ -234,10 +255,14 @@ const app = createApp({
                     content: message.content
                 });
             }
-            
+
+            if (message.type === 'assistant') {
+                this.playNotificationSound();
+            }
+
             // 更新会话
             this.updateCurrentSession();
-            
+
             return message;
         },
         
@@ -295,19 +320,46 @@ const app = createApp({
          * 处理重新生成
          */
         async handleRegenerate(message) {
-            // 找到上一条用户消息
             const msgIndex = this.messages.findIndex(m => m.id === message.id);
             if (msgIndex <= 0) return;
-            
+
             const userMsg = this.messages[msgIndex - 1];
             if (userMsg.type !== 'user') return;
-            
-            // 删除当前的助手回复
+
+            // 删除当前 assistant 回复并重建 history，避免重复 user 消息
             this.messages.splice(msgIndex, 1);
-            this.history.pop();
-            
-            // 重新发送
-            await this.handleSendMessage(userMsg.content);
+            this.rebuildHistoryFromMessages();
+            this.updateCurrentSession();
+
+            this.loading = true;
+            try {
+                const response = await API.chat.send(userMsg.content, this.history);
+
+                let content = '';
+                if (typeof response === 'string') {
+                    content = response;
+                } else if (response.result) {
+                    content = response.result;
+                } else if (response.content) {
+                    content = response.content;
+                } else {
+                    content = JSON.stringify(response);
+                }
+
+                this.addMessage({
+                    type: 'assistant',
+                    content
+                });
+            } catch (error) {
+                const errorMsg = errorHandler.handle(error);
+                this.addMessage({
+                    type: 'error',
+                    content: `重新生成失败: ${errorMsg}`
+                });
+                errorHandler.log(error, '重新生成失败');
+            } finally {
+                this.loading = false;
+            }
         },
         
         /**
@@ -385,6 +437,7 @@ const app = createApp({
          */
         closeSettings() {
             this.showSettings = false;
+            this.loadSettings();
         },
         
         /**
@@ -392,6 +445,43 @@ const app = createApp({
          */
         handleThemeChange(theme) {
             this.currentTheme = theme;
+        },
+
+        handleFileError(message) {
+            Toast.error(message || '文件操作失败');
+        },
+
+        playNotificationSound() {
+            if (!this.soundEnabled) return;
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) return;
+
+                const ctx = new AudioContextClass();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+
+                gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                oscillator.start();
+                oscillator.stop(ctx.currentTime + 0.12);
+
+                oscillator.onended = () => {
+                    if (typeof ctx.close === 'function') {
+                        ctx.close();
+                    }
+                };
+            } catch (e) {
+                // 音频不可用时静默降级
+            }
         }
     },
     
@@ -473,12 +563,14 @@ const app = createApp({
                     :loading="loading"
                     :files="files"
                     :uploading="uploading"
+                    :show-timestamp="showTimestamp"
                     @send="handleSendMessage"
                     @regenerate="handleRegenerate"
                     @toggle-sidebar="toggleSidebar"
                     @file-selected="handleFileSelected"
                     @delete-file="handleDeleteFile"
                     @analyze-file="handleAnalyzeFile"
+                    @file-error="handleFileError"
                 />
             </div>
 

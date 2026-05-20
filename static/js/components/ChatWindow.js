@@ -76,6 +76,10 @@ export const ChatWindow = defineComponent({
         uploading: {
             type: Boolean,
             default: false
+        },
+        showTimestamp: {
+            type: Boolean,
+            default: true
         }
     },
 
@@ -108,6 +112,10 @@ export const ChatWindow = defineComponent({
 
         handleAnalyzeFile(filename) {
             this.$emit('analyze-file', filename);
+        },
+
+        handleFileError(message) {
+            this.$emit('file-error', message);
         },
 
         goToAdmin() {
@@ -164,13 +172,15 @@ export const ChatWindow = defineComponent({
                 uploading: this.uploading,
                 onFileSelected: this.handleFileSelected,
                 onDeleteFile: this.handleDeleteFile,
-                onAnalyzeFile: this.handleAnalyzeFile
+                onAnalyzeFile: this.handleAnalyzeFile,
+                onError: this.handleFileError
             }),
 
             // 消息列表
             h(MessageList, {
                 messages: this.messages,
                 loading: this.loading,
+                showTimestamp: this.showTimestamp,
                 onRegenerate: this.handleRegenerate
             }),
 

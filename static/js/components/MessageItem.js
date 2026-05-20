@@ -65,14 +65,19 @@ export const MessageItem = defineComponent({
          */
         async handleCopy() {
             try {
-                await copyToClipboard(this.message.content);
+                const copied = await copyToClipboard(this.message.content);
+                if (!copied) {
+                    Toast.error('复制失败，请手动复制');
+                    return;
+                }
+
                 this.copied = true;
                 Toast.success('已复制到剪贴板');
                 setTimeout(() => {
                     this.copied = false;
                 }, 2000);
             } catch (e) {
-                Toast.error('复制失败');
+                Toast.error('复制失败，请手动复制');
             }
         },
         
