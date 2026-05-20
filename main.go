@@ -207,8 +207,9 @@ func main() {
 	}
 
 	// 初始化 Agent 服务
-	agentSvc := agent.NewAgentService(ollamaSvc, zhipuSvc, toolManager)
-	log.Info(ctx, "Agent 服务初始化完成")
+	contextBudget := os.Getenv("CONTEXT_BUDGET")
+	agentSvc := agent.NewAgentService(ollamaSvc, zhipuSvc, toolManager, contextBudget)
+	log.Info(ctx, "Agent 服务初始化完成，CONTEXT_BUDGET=%s", contextBudget)
 
 	// 初始化控制器
 	chatCtrl := controllers.NewChatController(agentSvc, rateLimiter)

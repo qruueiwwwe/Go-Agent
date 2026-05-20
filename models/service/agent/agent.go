@@ -15,10 +15,12 @@ type AgentService struct {
 	zhipuSvc     *ZhipuService
 	toolManager  *ToolManager
 	systemPrompt string
+	maxChars     int
+	maxMsgs      int
 }
 
 // NewAgentService 创建 Agent 服务
-func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManager *ToolManager) *AgentService {
+func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManager *ToolManager, budgetMode string) *AgentService {
 	systemPrompt := `
 你是一个智能助手，能使用工具。
 你有以下工具：
@@ -47,11 +49,14 @@ func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManag
 - 直接把工具返回的原始结果返回给用户
 - 原样返回结果，不做修改
 `
+	maxChars, maxMsgs := getContextBudget(budgetMode)
 	return &AgentService{
 		ollamaSvc:    ollamaSvc,
 		zhipuSvc:     zhipuSvc,
 		toolManager:  toolManager,
 		systemPrompt: systemPrompt,
+		maxChars:     maxChars,
+		maxMsgs:      maxMsgs,
 	}
 }
 
@@ -62,12 +67,11 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 		{Role: "system", Content: s.systemPrompt},
 	}
 
-	// 添加历史消息
-	for _, m := range history {
+	trimmedHistory := s.trimHistory(history, userMessage)
+	for _, m := range trimmedHistory {
 		msgs = append(msgs, m)
 	}
 
-	// 添加当前用户消息
 	msgs = append(msgs, api.Message{Role: "user", Content: userMessage})
 
 	log.Info(ctx, "开始处理用户消息: %s", userMessage)
@@ -401,4 +405,49 @@ func convertToZhipuMessages(msgs []api.Message) []zhipuMessage {
 		}
 	}
 	return result
+}
+
+func getContextBudget(mode string) (int, int) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "4k":
+		return 4000, 12
+	case "2k", "":
+		return 2000, 8
+	default:
+		return 2000, 8
+	}
+}
+
+func (s *AgentService) trimHistory(history []api.Message, userMessage string) []api.Message {
+	if len(history) == 0 {
+		return nil
+	}
+
+	usedChars := len(s.systemPrompt) + len(userMessage)
+	if usedChars >= s.maxChars {
+		return nil
+	}
+
+	keptReversed := make([]api.Message, 0, len(history))
+	for i := len(history) - 1; i >= 0; i-- {
+		msg := history[i]
+		if msg.Role != "user" && msg.Role != "assistant" {
+			continue
+		}
+		if len(keptReversed) >= s.maxMsgs {
+			break
+		}
+		contentLen := len(msg.Content)
+		if usedChars+contentLen > s.maxChars {
+			break
+		}
+		usedChars += contentLen
+		keptReversed = append(keptReversed, msg)
+	}
+
+	trimmed := make([]api.Message, len(keptReversed))
+	for i := range keptReversed {
+		trimmed[len(keptReversed)-1-i] = keptReversed[i]
+	}
+	return trimmed
 }

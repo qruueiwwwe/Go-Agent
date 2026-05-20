@@ -37,6 +37,13 @@ func AuthMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.Handl
 			return
 		}
 
+		// 校验用户是否仍然存在且未删除/禁用
+		user, err := authSvc.ValidateToken(r.Context(), tokenString)
+		if err != nil || user == nil || user.Status != 1 {
+			respondAuthError(w, 401, "用户未注册，需注册后才可体验", logid)
+			return
+		}
+
 		// 将用户信息与logid存入 context
 		ctx := context.WithValue(r.Context(), controllers.UserKey, claims)
 		ctx = log.WithLogID(ctx, logid)
