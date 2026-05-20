@@ -44,7 +44,7 @@ type UploadResponse struct {
 // @Success 200 {object} Response
 // @Router /api/upload [post]
 func (f *FileUploadController) Upload(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 
 	if ctx == nil || r == nil {
 		log.Error(context.Background(), "params is nil")
@@ -146,7 +146,7 @@ func (f *FileUploadController) Upload(ctx context.Context, w http.ResponseWriter
 // @Success 200 {object} Response
 // @Router /api/files [get]
 func (f *FileUploadController) ListFiles(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 
 	if ctx == nil || r == nil {
 		log.Error(context.Background(), "params is nil")
@@ -194,7 +194,7 @@ func (f *FileUploadController) ListFiles(ctx context.Context, w http.ResponseWri
 // @Success 200 {object} Response
 // @Router /api/file/{filename} [delete]
 func (f *FileUploadController) DeleteFile(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 
 	if ctx == nil || r == nil {
 		log.Error(context.Background(), "params is nil")

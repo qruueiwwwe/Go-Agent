@@ -2,12 +2,15 @@ package log
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"agent/global"
@@ -19,6 +22,10 @@ var (
 	once        sync.Once
 	config      global.LogConfig
 	logFile     *os.File
+
+	idOnce    sync.Once
+	runPrefix uint32
+	seq       uint64
 )
 
 const (
@@ -76,41 +83,42 @@ func getLogFileName() string {
 	return filepath.Join(config.Path, fmt.Sprintf("agent_%s.log", now.Format("2006-01-02")))
 }
 
-// GenerateLogID 生成日志ID（无用户信息时使用）
-// 格式：时间戳后5位 + 00000 + G = 11位
+func initIDGenerator() {
+	runPrefix = uint32(randomIntn(100))
+	start := uint64(10000000 + randomIntn(80000000))
+	atomic.StoreUint64(&seq, start)
+}
+
+func nextLogID() string {
+	idOnce.Do(initIDGenerator)
+	current := atomic.AddUint64(&seq, 1) % 100000000
+	return fmt.Sprintf("%02d%08d", runPrefix, current)
+}
+
+func randomIntn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		return int(binary.BigEndian.Uint64(b[:]) % uint64(n))
+	}
+
+	return int(time.Now().UnixNano() % int64(n))
+}
+
+// GenerateLogID 生成日志ID（10位数字）
+// 格式：2位运行代号 + 8位进程内自增序列
 func GenerateLogID() string {
-	timestamp := time.Now().UnixNano() % 100000
-	return fmt.Sprintf("%05d00000G", timestamp)
+	return nextLogID()
 }
 
 // GenerateLogIDWithUser 根据用户信息生成日志ID
-// 格式：时间戳后5位 + 用户ID后5位 + 角色首字符
-// 示例：1234500001U（时间戳后5位 + 用户ID 1 + user角色）
-// 总长度固定11位
+// 为保持兼容，保留函数签名，内部统一使用新生成规则
 func GenerateLogIDWithUser(claims interface{}) string {
-	timestamp := time.Now().UnixNano() % 100000 // 时间戳后5位
-
-	var userID int64 = 0
-	var roleByte byte = 'G' // Guest，未登录用户
-
-	if claims != nil {
-		if c, ok := claims.(interface {
-			GetUserID() int64
-			GetRole() string
-		}); ok {
-			userID = c.GetUserID()
-			role := c.GetRole()
-			if len(role) > 0 {
-				roleByte = role[0]
-				if roleByte >= 'a' && roleByte <= 'z' {
-					roleByte -= 32 // 转大写
-				}
-			}
-		}
-	}
-
-	// 格式：时间戳(5位) + 用户ID(5位) + 角色首字符(1位) = 11位
-	return fmt.Sprintf("%05d%05d%c", timestamp, userID%100000, roleByte)
+	_ = claims
+	return nextLogID()
 }
 
 // WithContext 创建带日志ID的上下文

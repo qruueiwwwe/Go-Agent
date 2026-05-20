@@ -75,25 +75,25 @@ func (r *Router) handleChat(w http.ResponseWriter, rq *http.Request) {
 
 // handleHealth 处理健康检查
 func (r *Router) handleHealth(w http.ResponseWriter, rq *http.Request) {
-	ctx := context.Background()
+	ctx := rq.Context()
 	r.healthCtrl.Health(ctx, w, rq)
 }
 
 // handleUpload 处理文件上传
 func (r *Router) handleUpload(w http.ResponseWriter, rq *http.Request) {
-	ctx := context.Background()
+	ctx := rq.Context()
 	r.fileCtrl.Upload(ctx, w, rq)
 }
 
 // handleListFiles 处理获取文件列表
 func (r *Router) handleListFiles(w http.ResponseWriter, rq *http.Request) {
-	ctx := context.Background()
+	ctx := rq.Context()
 	r.fileCtrl.ListFiles(ctx, w, rq)
 }
 
 // handleDeleteFile 处理删除文件
 func (r *Router) handleDeleteFile(w http.ResponseWriter, rq *http.Request) {
-	ctx := context.Background()
+	ctx := rq.Context()
 	r.fileCtrl.DeleteFile(ctx, w, rq)
 }
 

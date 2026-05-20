@@ -90,7 +90,7 @@ func (c *ChatController) Chat(ctx context.Context, w http.ResponseWriter, r *htt
 
 	// 获取用户信息用于生成 logid
 	claims := GetUserFromContext(ctx)
-	logid := log.GenerateLogIDWithUser(claims)
+	logid := log.GetLogID(ctx)
 
 	// 添加 logid（不要覆盖原 ctx，用新的变量）
 	logCtx := log.WithLogID(ctx, logid)
@@ -144,7 +144,7 @@ func (c *ChatController) Chat(ctx context.Context, w http.ResponseWriter, r *htt
 	log.Info(logCtx, "收到用户消息: %s", req.Message)
 
 	// 调用服务
-	result := c.agentSvc.Process(ctx, req.Message, c.messages)
+	result := c.agentSvc.Process(logCtx, req.Message, c.messages)
 
 	// 保存到历史
 	c.messages = append(c.messages, api.Message{Role: "user", Content: req.Message})
@@ -168,7 +168,7 @@ func NewHealthController() *HealthController {
 
 // Health 健康检查
 func (h *HealthController) Health(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	ReplySuccess(w, map[string]string{
 		"status": "ok",
 	}, logid)

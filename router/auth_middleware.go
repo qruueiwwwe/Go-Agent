@@ -37,8 +37,9 @@ func AuthMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.Handl
 			return
 		}
 
-		// 将用户信息存入 context
+		// 将用户信息与logid存入 context
 		ctx := context.WithValue(r.Context(), controllers.UserKey, claims)
+		ctx = log.WithLogID(ctx, logid)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -59,7 +60,8 @@ func AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		next(w, r)
+		ctx := log.WithLogID(r.Context(), logid)
+		next(w, r.WithContext(ctx))
 	}
 }
 

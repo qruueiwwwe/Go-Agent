@@ -28,7 +28,7 @@ func NewAuthController(authSvc *auth.AuthService, smsSvc *auth.SMSService, email
 
 // Register 用户注册
 func (c *AuthController) Register(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -78,7 +78,7 @@ func (c *AuthController) Register(ctx context.Context, w http.ResponseWriter, r 
 
 // Login 用户登录
 func (c *AuthController) Login(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -118,7 +118,7 @@ func (c *AuthController) Login(ctx context.Context, w http.ResponseWriter, r *ht
 // GetMe 获取当前用户信息
 func (c *AuthController) GetMe(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(ctx)
-	logid := log.GenerateLogIDWithUser(claims)
+	logid := log.GetLogID(ctx)
 
 	if claims == nil {
 		Reply(w, 401, "未登录", nil, logid)
@@ -142,7 +142,7 @@ func GetUserFromContext(ctx context.Context) *auth.Claims {
 
 // SendSMSCode 发送验证码
 func (c *AuthController) SendSMSCode(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Phone string `json:"phone"`
 		Scene string `json:"scene"`
@@ -160,7 +160,7 @@ func (c *AuthController) SendSMSCode(ctx context.Context, w http.ResponseWriter,
 
 // RegisterByPhone 手机号验证码注册
 func (c *AuthController) RegisterByPhone(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Phone    string `json:"phone"`
 		Code     string `json:"code"`
@@ -194,7 +194,7 @@ func (c *AuthController) RegisterByPhone(ctx context.Context, w http.ResponseWri
 
 // ResetPassword 重置密码
 func (c *AuthController) ResetPassword(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Phone       string `json:"phone"`
 		Code        string `json:"code"`
@@ -218,7 +218,7 @@ func (c *AuthController) ResetPassword(ctx context.Context, w http.ResponseWrite
 // SendEmailCode 发送邮箱验证码接口。
 // 场景 scene 支持：register / reset_password。
 func (c *AuthController) SendEmailCode(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Email string `json:"email"`
 		Scene string `json:"scene"`
@@ -237,7 +237,7 @@ func (c *AuthController) SendEmailCode(ctx context.Context, w http.ResponseWrite
 // RegisterByEmail 邮箱验证码注册接口。
 // phone 为可选参数，不影响邮箱主流程。
 func (c *AuthController) RegisterByEmail(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Email    string `json:"email"`
 		Code     string `json:"code"`
@@ -278,7 +278,7 @@ func (c *AuthController) RegisterByEmail(ctx context.Context, w http.ResponseWri
 
 // ResetPasswordByEmail 邮箱验证码重置密码接口。
 func (c *AuthController) ResetPasswordByEmail(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	logid := log.GenerateLogID()
+	logid := log.GetLogID(ctx)
 	var req struct {
 		Email       string `json:"email"`
 		Code        string `json:"code"`

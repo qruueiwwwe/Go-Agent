@@ -23,8 +23,7 @@ func NewAdminController(userDAO *dao.UserDAO) *AdminController {
 
 // GetUsers 获取所有用户列表
 func (c *AdminController) GetUsers(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(ctx)
-	logid := log.GenerateLogIDWithUser(claims)
+	logid := log.GetLogID(ctx)
 
 	users, err := c.userDAO.ListAll(ctx)
 	if err != nil {
@@ -48,7 +47,7 @@ type UpdateUserRoleRequest struct {
 // UpdateUserRole 更新用户角色
 func (c *AdminController) UpdateUserRole(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(ctx)
-	logid := log.GenerateLogIDWithUser(claims)
+	logid := log.GetLogID(ctx)
 
 	if claims == nil {
 		Reply(w, 401, "未登录", nil, logid)
@@ -104,7 +103,7 @@ type UpdateUserStatusRequest struct {
 // UpdateUserStatus 更新用户状态
 func (c *AdminController) UpdateUserStatus(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(ctx)
-	logid := log.GenerateLogIDWithUser(claims)
+	logid := log.GetLogID(ctx)
 
 	if claims == nil {
 		Reply(w, 401, "未登录", nil, logid)
