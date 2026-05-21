@@ -9,6 +9,8 @@ import (
 
 	"agent/global"
 	"agent/library/log"
+
+	"github.com/ollama/ollama/api"
 )
 
 // ZhipuService 智谱清言服务
@@ -236,4 +238,16 @@ func lastIndexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// ChatWithAPIMessages 使用 api.Message 格式与智谱大模型对话（适配器方法）
+func (s *ZhipuService) ChatWithAPIMessages(ctx context.Context, messages []api.Message) (string, error) {
+	zhipuMsgs := make([]zhipuMessage, len(messages))
+	for i, m := range messages {
+		zhipuMsgs[i] = zhipuMessage{
+			Role:    m.Role,
+			Content: m.Content,
+		}
+	}
+	return s.Chat(ctx, zhipuMsgs)
 }

@@ -14,6 +14,7 @@ type Config struct {
 	WeatherAPI WeatherAPIConfig
 	Zhipu      ZhipuConfig
 	JWT        JWTConfig
+	Blocker    BlockerConfig
 }
 
 // ServerConfig 服务配置
@@ -87,13 +88,18 @@ type JWTConfig struct {
 	ExpireTime time.Duration // Token 有效期
 }
 
+// BlockerConfig 屏蔽词配置
+type BlockerConfig struct {
+	Words []string // 屏蔽词列表
+}
+
 // DefaultConfig 默认配置
 var DefaultConfig = Config{
 	Server: ServerConfig{
 		Port:         "25565",
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 120 * time.Second, // 增加到 2 分钟，支持 LLM 长响应
+		IdleTimeout:  120 * time.Second,
 	},
 	Ollama: OllamaConfig{
 		Host:        "localhost:11434",
@@ -136,12 +142,15 @@ var DefaultConfig = Config{
 		APIKey:      "", // 从环境变量 ZHIPU_API_KEY 读取
 		Model:       "glm-4-flash",
 		BaseURL:     "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-		Timeout:     60 * time.Second,
+		Timeout:     120 * time.Second, // 增加到 2 分钟
 		Temperature: 0.3,
 		Enable:      true,
 	},
 	JWT: JWTConfig{
 		Secret:     "", // 从环境变量 JWT_SECRET 读取
 		ExpireTime: 24 * time.Hour,
+	},
+	Blocker: BlockerConfig{
+		Words: []string{"谢", "润", "泽", "xie", "run", "ze"}, // 默认屏蔽词
 	},
 }

@@ -148,6 +148,15 @@ export const ChatWindow = defineComponent({
                 ]),
                 // 用户信息区
                 h('div', { class: 'header-right' }, [
+                    // 角色对话按钮
+                    h('button', {
+                        class: 'persona-header-btn',
+                        onClick: () => this.$emit('open-persona'),
+                        title: '角色对话'
+                    }, [
+                        h('span', { class: 'btn-icon' }, '🎭'),
+                        h('span', { class: 'btn-text' }, '角色对话')
+                    ]),
                     isAdmin ? h('button', {
                         class: 'admin-btn',
                         onClick: this.goToAdmin

@@ -18,6 +18,7 @@ type Router struct {
 	staticFS       fs.FS // 静态文件系统（可选，用于嵌入模式）
 	authCtrl       *controllers.AuthController
 	adminCtrl      *controllers.AdminController
+	personaCtrl    *controllers.PersonaController
 	authMiddleware func(http.HandlerFunc) http.HandlerFunc
 }
 
@@ -42,6 +43,11 @@ func (r *Router) SetAuth(authCtrl *controllers.AuthController, authSvc *auth.Aut
 // SetAdmin 设置后台管理控制器
 func (r *Router) SetAdmin(adminCtrl *controllers.AdminController) {
 	r.adminCtrl = adminCtrl
+}
+
+// SetPersona 设置角色卡控制器
+func (r *Router) SetPersona(personaCtrl *controllers.PersonaController) {
+	r.personaCtrl = personaCtrl
 }
 
 // SetStaticFS 设置静态文件系统（用于嵌入模式）

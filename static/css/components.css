@@ -1654,3 +1654,534 @@
         display: none;
     }
 }
+
+/* ===== 角色卡选择器 ===== */
+
+.persona-selector-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+}
+
+.persona-selector-panel {
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-xl);
+    animation: slideUp 0.3s ease;
+}
+
+.persona-selector-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-5);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.persona-selector-header h3 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    color: var(--text-primary);
+}
+
+.persona-selector-header .close-btn {
+    background: none;
+    border: none;
+    font-size: var(--font-size-xl);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+}
+
+.persona-selector-header .close-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.persona-vip-notice {
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.persona-vip-notice p {
+    margin: var(--space-2) 0;
+}
+
+.persona-vip-notice .sub {
+    font-size: var(--font-size-sm);
+    opacity: 0.7;
+}
+
+.persona-tabs {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.persona-tabs .tab-btn {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-secondary);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.persona-tabs .tab-btn:hover {
+    background: var(--bg-tertiary);
+}
+
+.persona-tabs .tab-btn.active {
+    background: var(--accent-primary);
+    color: #ffffff;
+}
+
+/* 创建角色按钮 */
+.persona-actions {
+    padding: var(--space-3) var(--space-5);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.create-btn {
+    width: 100%;
+    padding: var(--space-3);
+    background: var(--accent-primary);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.create-btn:hover {
+    background: var(--accent-secondary);
+}
+
+/* 创建角色表单 */
+.persona-create-form {
+    padding: var(--space-5);
+    overflow-y: auto;
+}
+
+.form-group {
+    margin-bottom: var(--space-4);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: var(--space-2);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-group input[type="text"],
+.form-group textarea {
+    width: 100%;
+    padding: var(--space-3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
+}
+
+.form-group.checkbox {
+    margin-top: var(--space-3);
+}
+
+.form-group.checkbox label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    font-weight: 400;
+}
+
+.form-group.checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.form-actions {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-5);
+}
+
+.form-actions button {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancel {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+.btn-create {
+    background: var(--accent-primary);
+    color: #ffffff;
+    border: none;
+}
+
+.btn-create:hover:not(:disabled) {
+    background: var(--accent-secondary);
+}
+
+.btn-create:disabled,
+.btn-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.persona-error {
+    padding: var(--space-4);
+    margin: var(--space-4) var(--space-5);
+    background: var(--color-error-light);
+    color: var(--error);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+}
+
+.persona-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8);
+    color: var(--text-secondary);
+}
+
+.persona-empty {
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.persona-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-3);
+}
+
+.persona-card {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.persona-card:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+}
+
+.persona-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--accent-primary);
+}
+
+.persona-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+}
+
+.persona-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.persona-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.persona-tagline {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.persona-meta {
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+}
+
+/* ===== 角色对话模式 ===== */
+
+.persona-mode {
+    background: var(--bg-primary);
+}
+
+.persona-header {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+}
+
+.persona-header .header-title h1,
+.persona-header .header-title p {
+    color: white;
+}
+
+.persona-header .back-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    transition: all 0.2s;
+    margin-right: var(--space-4);
+}
+
+.persona-header .back-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.persona-header .back-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.persona-info-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.persona-avatar-small {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: var(--font-size-lg);
+}
+
+/* 角色对话消息 */
+.persona-mode .messages-container {
+    padding: var(--space-4);
+}
+
+.persona-mode .message-list {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.persona-mode .message {
+    max-width: 80%;
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+}
+
+.persona-mode .message.user {
+    margin-left: auto;
+    background: var(--accent-primary);
+    color: white;
+}
+
+.persona-mode .message.assistant {
+    margin-right: auto;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.persona-mode .message.error {
+    margin-right: auto;
+    background: var(--color-error-light);
+    color: var(--error);
+}
+
+.persona-mode .message-text {
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 角色对话输入区 */
+.persona-mode .input-area {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.persona-mode .input-area textarea {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    resize: none;
+    min-height: 44px;
+    max-height: 120px;
+    font-family: inherit;
+}
+
+.persona-mode .input-area textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.persona-mode .input-area .send-btn {
+    padding: var(--space-3) var(--space-5);
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.persona-mode .input-area .send-btn:hover:not(:disabled) {
+    background: var(--accent-secondary);
+}
+
+.persona-mode .input-area .send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 角色对话按钮 */
+.persona-header-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.persona-header-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #ffffff;
+}
+
+.persona-header-btn .btn-icon {
+    font-size: var(--font-size-base);
+}
+
+/* 深色模式下的角色对话按钮 */
+[data-theme="dark"] .persona-header-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #ffffff;
+}
+
+/* 动画 */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+

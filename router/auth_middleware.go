@@ -72,6 +72,27 @@ func AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// VIPMiddleware VIP或管理员权限中间件
+func VIPMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims := controllers.GetUserFromContext(r.Context())
+		logid := log.GenerateLogIDWithUser(claims)
+
+		if claims == nil {
+			respondAuthError(w, 401, "未登录", logid)
+			return
+		}
+
+		if claims.Role != "vip" && claims.Role != "admin" {
+			respondAuthError(w, 403, "该功能仅限VIP用户使用，请升级VIP", logid)
+			return
+		}
+
+		ctx := log.WithLogID(r.Context(), logid)
+		next(w, r.WithContext(ctx))
+	}
+}
+
 // respondAuthError 返回认证错误响应
 func respondAuthError(w http.ResponseWriter, errno int, errmsg string, logid string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

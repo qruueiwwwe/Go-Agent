@@ -50,6 +50,18 @@ func RegisterAPIRoutes(mux *http.ServeMux, r *Router) {
 		// 更新用户角色
 		mux.HandleFunc("/api/admin/users/", r.authMiddleware(AdminMiddleware(r.handleAdminUserUpdate)))
 	}
+
+	// 角色卡接口（需要VIP/管理员权限）
+	if r.personaCtrl != nil && r.authMiddleware != nil {
+		mux.HandleFunc("/api/persona/list", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaList))))
+		mux.HandleFunc("/api/persona/detail", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaDetail))))
+		mux.HandleFunc("/api/persona/create", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaCreate))))
+		mux.HandleFunc("/api/persona/update", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaUpdate))))
+		mux.HandleFunc("/api/persona/delete", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaDelete))))
+		mux.HandleFunc("/api/persona/chat", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaChat))))
+		mux.HandleFunc("/api/persona/sessions", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaSessions))))
+		mux.HandleFunc("/api/persona/history", r.authMiddleware(VIPMiddleware(Wrap(r.personaCtrl.PersonaHistory))))
+	}
 }
 
 // handleAdminUserUpdate 处理管理员用户更新请求（角色/状态）

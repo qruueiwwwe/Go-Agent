@@ -222,6 +222,115 @@ export const filesAPI = {
 };
 
 /**
+ * 角色卡 API
+ */
+export const personaAPI = {
+    /**
+     * 获取角色卡列表
+     * @param {string} type - 'public' 或 'mine'
+     * @param {number} page - 页码
+     * @param {number} size - 每页数量
+     * @returns {Promise<Object>} 角色列表
+     */
+    async list(type = 'public', page = 1, size = 20) {
+        const response = await request(`/persona/list?type=${type}&page=${page}&size=${size}`);
+        return response.data || { list: [], total: 0 };
+    },
+
+    /**
+     * 获取角色卡详情
+     * @param {number} id - 角色卡ID
+     * @returns {Promise<Object>} 角色详情
+     */
+    async detail(id) {
+        const response = await request(`/persona/detail?id=${id}`);
+        return response.data;
+    },
+
+    /**
+     * 创建角色卡
+     * @param {Object} data - 角色卡数据
+     * @returns {Promise<Object>} 创建结果
+     */
+    async create(data) {
+        const response = await request('/persona/create', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        return response.data;
+    },
+
+    /**
+     * 更新角色卡
+     * @param {Object} data - 角色卡数据（含id）
+     * @returns {Promise<Object>} 更新结果
+     */
+    async update(data) {
+        const response = await request('/persona/update', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        return response.data;
+    },
+
+    /**
+     * 删除角色卡
+     * @param {number} id - 角色卡ID
+     * @returns {Promise<Object>} 删除结果
+     */
+    async delete(id) {
+        const response = await request('/persona/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+        return response.data;
+    },
+
+    /**
+     * 发送角色卡对话消息
+     * @param {number} personaId - 角色卡ID
+     * @param {string} message - 消息内容
+     * @param {string} sessionId - 会话ID（可选）
+     * @returns {Promise<Object>} 对话响应
+     */
+    async chat(personaId, message, sessionId = null) {
+        const body = { persona_id: personaId, message };
+        if (sessionId) {
+            body.session_id = sessionId;
+        }
+        const response = await request('/persona/chat', {
+            method: 'POST',
+            body: JSON.stringify(body)
+        }, { maxRetries: 1, retryDelay: 1000 });
+        return response.data;
+    },
+
+    /**
+     * 获取角色卡会话列表
+     * @param {number} personaId - 角色卡ID（可选）
+     * @returns {Promise<Array>} 会话列表
+     */
+    async sessions(personaId = null) {
+        let url = '/persona/sessions';
+        if (personaId) {
+            url += `?persona_id=${personaId}`;
+        }
+        const response = await request(url);
+        return response.data?.sessions || [];
+    },
+
+    /**
+     * 获取会话历史
+     * @param {string} sessionId - 会话ID
+     * @returns {Promise<Object>} 会话历史
+     */
+    async history(sessionId) {
+        const response = await request(`/persona/history?session_id=${sessionId}`);
+        return response.data;
+    }
+};
+
+/**
  * 错误处理工具
  */
 export const errorHandler = {
@@ -293,6 +402,7 @@ export async function checkAPIHealth() {
 export default {
     chat: chatAPI,
     files: filesAPI,
+    persona: personaAPI,
     errorHandler,
     checkAPIHealth
 };

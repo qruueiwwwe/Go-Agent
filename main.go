@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 	"agent/models/dao"
 	"agent/models/service/agent"
 	authService "agent/models/service/auth"
+	"agent/models/service/blocker"
 	"agent/models/service/calculator"
 	"agent/models/service/nbnhhsh"
+	"agent/models/service/persona"
 	"agent/models/service/weather"
 	"agent/router"
 	"agent/webapi/controllers"
@@ -101,6 +104,10 @@ func main() {
 	if dbPassword := os.Getenv("DATABASE_PASSWORD"); dbPassword != "" {
 		cfg.Database.Password = dbPassword
 	}
+	// 屏蔽词配置
+	if blockedWords := os.Getenv("BLOCKED_WORDS"); blockedWords != "" {
+		cfg.Blocker.Words = strings.Split(blockedWords, ",")
+	}
 
 	// 初始化日志
 	log.Init(cfg.Log)
@@ -156,6 +163,11 @@ func main() {
 		// 执行数据库迁移
 		if err := mysql.AutoMigrate(ctx); err != nil {
 			log.Error(ctx, "数据库迁移失败: %v", err)
+		}
+
+		// 执行角色卡表迁移
+		if err := mysql.AutoMigratePersonaTables(ctx); err != nil {
+			log.Error(ctx, "角色卡表迁移失败: %v", err)
 		}
 	}
 
@@ -216,6 +228,32 @@ func main() {
 	toolCtrl := controllers.NewToolController(toolManager)
 	log.Info(ctx, "控制器初始化完成")
 
+	// 初始化角色卡服务（需要 MySQL）
+	var personaCtrl *controllers.PersonaController
+	if mysql != nil {
+		personaDAO := dao.NewPersonaDAO(mysql)
+		personaExampleDAO := dao.NewPersonaExampleDAO(mysql)
+		personaChatDAO := dao.NewPersonaChatDAO(mysql)
+
+		// 初始化屏蔽词服务
+		blockerSvc := blocker.NewService(cfg.Blocker.Words)
+		log.Info(ctx, "屏蔽词服务初始化完成，屏蔽词数量: %d", len(cfg.Blocker.Words))
+
+		personaSvc := persona.NewPersonaService(personaDAO, personaExampleDAO, blockerSvc)
+
+		// 创建智谱适配器函数
+		var zhipuChatFunc func(ctx context.Context, msgs []api.Message) (string, error)
+		if zhipuSvc != nil {
+			zhipuChatFunc = zhipuSvc.ChatWithAPIMessages
+		}
+		chatSvc := persona.NewChatService(personaDAO, personaChatDAO, personaExampleDAO, ollamaSvc, zhipuChatFunc)
+
+		personaCtrl = controllers.NewPersonaController(personaSvc, chatSvc)
+		log.Info(ctx, "角色卡服务初始化完成")
+	} else {
+		log.Warn(ctx, "MySQL 不可用，角色卡服务未启用")
+	}
+
 	// 初始化路由
 	r := router.NewRouter(chatCtrl, toolCtrl)
 	r.SetStaticFS(StaticFS()) // 使用嵌入的静态文件
@@ -224,6 +262,9 @@ func main() {
 	}
 	if adminCtrl != nil {
 		r.SetAdmin(adminCtrl)
+	}
+	if personaCtrl != nil {
+		r.SetPersona(personaCtrl)
 	}
 	mux := http.NewServeMux()
 	r.RegisterRoutes(mux)

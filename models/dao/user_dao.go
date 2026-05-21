@@ -58,7 +58,7 @@ func (d *UserDAO) Create(ctx context.Context, user *User) error {
 func (d *UserDAO) FindByUsername(ctx context.Context, username string) (*User, error) {
 	user := &User{}
 	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
-	          FROM users WHERE username = ?`
+	          FROM users WHERE username = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
 
 	var phone, email sql.NullString
 	err := d.mysql.db.QueryRowContext(ctx, query, username).Scan(
@@ -82,7 +82,7 @@ func (d *UserDAO) FindByUsername(ctx context.Context, username string) (*User, e
 func (d *UserDAO) FindByID(ctx context.Context, id int64) (*User, error) {
 	user := &User{}
 	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
-	          FROM users WHERE id = ?`
+	          FROM users WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
 
 	var phone, email sql.NullString
 	err := d.mysql.db.QueryRowContext(ctx, query, id).Scan(
@@ -106,7 +106,7 @@ func (d *UserDAO) FindByID(ctx context.Context, id int64) (*User, error) {
 func (d *UserDAO) FindByPhone(ctx context.Context, phone string) (*User, error) {
 	user := &User{}
 	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
-	          FROM users WHERE phone = ?`
+	          FROM users WHERE phone = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
 
 	var dbPhone, email sql.NullString
 	err := d.mysql.db.QueryRowContext(ctx, query, phone).Scan(
@@ -152,7 +152,7 @@ func (d *UserDAO) UpdatePasswordByPhone(ctx context.Context, phone, hashedPasswo
 func (d *UserDAO) FindByEmail(ctx context.Context, email string) (*User, error) {
 	user := &User{}
 	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
-	          FROM users WHERE email = ?`
+	          FROM users WHERE email = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
 
 	var phone, dbEmail sql.NullString
 	err := d.mysql.db.QueryRowContext(ctx, query, email).Scan(
@@ -228,7 +228,7 @@ func (d *UserDAO) Update(ctx context.Context, user *User) error {
 // ListAll 获取所有用户列表
 func (d *UserDAO) ListAll(ctx context.Context) ([]*User, error) {
 	query := `SELECT id, username, password, nickname, phone, email, role, status, created_at, updated_at 
-	          FROM users ORDER BY id DESC`
+	          FROM users WHERE (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id DESC`
 
 	rows, err := d.mysql.db.QueryContext(ctx, query)
 	if err != nil {
@@ -278,5 +278,17 @@ func (d *UserDAO) UpdateStatus(ctx context.Context, userID int64, status int) er
 		return err
 	}
 	log.Info(ctx, "UserDAO.UpdateStatus: 状态更新成功 userID=%d, status=%d", userID, status)
+	return nil
+}
+
+// SoftDelete 软删除用户
+func (d *UserDAO) SoftDelete(ctx context.Context, userID int64) error {
+	query := `UPDATE users SET is_deleted = 1, updated_at = NOW() WHERE id = ?`
+	_, err := d.mysql.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		log.Error(ctx, "UserDAO.SoftDelete: 删除失败 userID=%d, err=%v", userID, err)
+		return err
+	}
+	log.Info(ctx, "UserDAO.SoftDelete: 用户删除成功 userID=%d", userID)
 	return nil
 }

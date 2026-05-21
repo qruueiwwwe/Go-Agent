@@ -6,6 +6,7 @@ import { ChatWindow } from './components/ChatWindow.js';
 import { FileManager } from './components/FileManager.js';
 import { Settings } from './components/Settings.js';
 import { ToastContainer, Toast } from './components/Toast.js';
+import { PersonaSelector } from './components/PersonaSelector.js';
 import API, { errorHandler } from './api.js';
 import { generateId, ThemeManager } from './utils.js';
 
@@ -21,7 +22,8 @@ const app = createApp({
         ChatWindow,
         FileManager,
         Settings,
-        ToastContainer
+        ToastContainer,
+        PersonaSelector
     },
     
     data() {
@@ -58,13 +60,25 @@ const app = createApp({
 
             // 设置项
             showTimestamp: localStorage.getItem('setting-timestamp') !== 'false',
-            soundEnabled: localStorage.getItem('setting-sound') === 'true'
+            soundEnabled: localStorage.getItem('setting-sound') === 'true',
+
+            // 角色卡模式
+            personaMode: false,
+            showPersonaSelector: false,
+            currentPersona: null,
+            personaSessionId: null,
+            personaMessages: [],
+            personaInputText: ''
         };
     },
     
     computed: {
         lastMessage() {
             return this.messages[this.messages.length - 1];
+        },
+        userRole() {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            return user.role || 'user';
         }
     },
     
@@ -482,6 +496,147 @@ const app = createApp({
             } catch (e) {
                 // 音频不可用时静默降级
             }
+        },
+
+        // ========== 角色卡模式方法 ==========
+
+        /**
+         * 打开角色选择器
+         */
+        openPersonaSelector() {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (user.role !== 'vip' && user.role !== 'admin') {
+                Toast.error('角色对话功能仅限 VIP 用户使用');
+                return;
+            }
+            this.showPersonaSelector = true;
+        },
+
+        /**
+         * 关闭角色选择器
+         */
+        closePersonaSelector() {
+            this.showPersonaSelector = false;
+        },
+
+        /**
+         * 选择角色并进入对话模式
+         */
+        async selectPersona(persona) {
+            this.currentPersona = persona;
+            this.personaMode = true;
+            this.personaSessionId = null;
+            this.personaMessages = [];
+            this.showPersonaSelector = false;
+
+            // 添加欢迎消息
+            this.addPersonaMessage({
+                type: 'assistant',
+                content: `你好！我是${persona.name}。${persona.tagline || ''}\n\n有什么我可以帮你的吗？`
+            });
+        },
+
+        /**
+         * 退出角色模式
+         */
+        exitPersonaMode() {
+            // 如果正在加载，提示用户
+            if (this.loading) {
+                Toast.warning('正在等待响应，请稍候...');
+                return;
+            }
+            this.personaMode = false;
+            this.currentPersona = null;
+            this.personaSessionId = null;
+            this.personaMessages = [];
+        },
+
+        /**
+         * 添加角色对话消息
+         */
+        addPersonaMessage(messageData) {
+            const message = {
+                id: generateId(),
+                type: messageData.type || 'assistant',
+                content: messageData.content || '',
+                timestamp: Date.now()
+            };
+            this.personaMessages.push(message);
+
+            if (message.type === 'assistant') {
+                this.playNotificationSound();
+            }
+
+            return message;
+        },
+
+        /**
+         * 处理角色对话发送
+         */
+        async handlePersonaSendMessage(userMessage) {
+            if (!userMessage || !userMessage.trim()) return;
+            if (!this.currentPersona) return;
+
+            // 添加用户消息
+            this.addPersonaMessage({
+                type: 'user',
+                content: userMessage
+            });
+
+            this.loading = true;
+
+            try {
+                const response = await API.persona.chat(
+                    this.currentPersona.id,
+                    userMessage,
+                    this.personaSessionId
+                );
+
+                // 保存会话ID
+                this.personaSessionId = response.session_id;
+
+                // 添加助手消息
+                this.addPersonaMessage({
+                    type: 'assistant',
+                    content: response.response
+                });
+            } catch (error) {
+                const errorMsg = errorHandler.handle(error);
+                this.addPersonaMessage({
+                    type: 'error',
+                    content: `错误: ${errorMsg}`
+                });
+                errorHandler.log(error, '角色对话失败');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        /**
+         * 发送角色消息（从输入框）
+         */
+        sendPersonaMessage() {
+            if (this.personaInputText?.trim()) {
+                this.handlePersonaSendMessage(this.personaInputText);
+                this.personaInputText = '';
+            }
+        },
+
+        /**
+         * 处理角色输入框 Enter 键
+         */
+        handlePersonaEnter(event) {
+            if (!event.shiftKey) {
+                this.sendPersonaMessage();
+            }
+        },
+
+        /**
+         * 渲染消息内容
+         */
+        renderContent(content, type) {
+            // 简单的换行处理
+            return content?.replace(/\n/g, '<br>') || '';
         }
     },
     
@@ -526,8 +681,8 @@ const app = createApp({
     template: `
         <div id="app">
             <div class="app-layout">
-                <!-- 侧边栏 -->
-                <aside :class="['sidebar', sidebarCollapsed && 'collapsed']">
+                <!-- 侧边栏（非角色模式时显示） -->
+                <aside v-if="!personaMode" :class="['sidebar', sidebarCollapsed && 'collapsed']">
                     <div class="sidebar-header">
                         <button class="sidebar-toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开' : '收起'">
                             <span class="toggle-icon">{{ sidebarCollapsed ? '☰' : '✕' }}</span>
@@ -557,22 +712,78 @@ const app = createApp({
                     </div>
                 </aside>
 
-                <!-- 聊天窗口 -->
-                <chat-window
-                    :messages="messages"
-                    :loading="loading"
-                    :files="files"
-                    :uploading="uploading"
-                    :show-timestamp="showTimestamp"
-                    @send="handleSendMessage"
-                    @regenerate="handleRegenerate"
-                    @toggle-sidebar="toggleSidebar"
-                    @file-selected="handleFileSelected"
-                    @delete-file="handleDeleteFile"
-                    @analyze-file="handleAnalyzeFile"
-                    @file-error="handleFileError"
-                />
+                <!-- 角色模式 -->
+                <template v-if="personaMode">
+                    <div class="main-content persona-mode">
+                        <!-- 角色模式头部 -->
+                        <div class="app-header persona-header">
+                            <div class="header-left">
+                                <button class="back-btn" @click="exitPersonaMode" :disabled="loading" :title="loading ? '正在等待响应...' : '返回'">← 返回</button>
+                                <div class="persona-info-header">
+                                    <div class="persona-avatar-small">
+                                        {{ currentPersona?.name?.charAt(0) || '?' }}
+                                    </div>
+                                    <div class="header-title">
+                                        <h1>{{ currentPersona?.name || '角色对话' }}</h1>
+                                        <p>{{ currentPersona?.tagline || '' }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 消息列表 -->
+                        <div class="messages-container">
+                            <div class="message-list">
+                                <div v-for="msg in personaMessages" :key="msg.id" :class="['message', msg.type]">
+                                    <div class="message-content">
+                                        <div class="message-text" v-html="renderContent(msg.content, msg.type)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 输入区 -->
+                        <div class="input-area">
+                            <textarea
+                                v-model="personaInputText"
+                                placeholder="输入消息..."
+                                @keydown.enter.prevent="handlePersonaEnter"
+                                :disabled="loading"
+                            ></textarea>
+                            <button class="send-btn" @click="sendPersonaMessage" :disabled="loading || !personaInputText?.trim()">
+                                {{ loading ? '发送中...' : '发送' }}
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 普通聊天窗口 -->
+                <template v-else>
+                    <chat-window
+                        :messages="messages"
+                        :loading="loading"
+                        :files="files"
+                        :uploading="uploading"
+                        :show-timestamp="showTimestamp"
+                        @send="handleSendMessage"
+                        @regenerate="handleRegenerate"
+                        @toggle-sidebar="toggleSidebar"
+                        @file-selected="handleFileSelected"
+                        @delete-file="handleDeleteFile"
+                        @analyze-file="handleAnalyzeFile"
+                        @file-error="handleFileError"
+                        @open-persona="openPersonaSelector"
+                    />
+                </template>
             </div>
+
+            <!-- 角色选择器 -->
+            <persona-selector
+                :visible="showPersonaSelector"
+                :user-role="userRole"
+                @select="selectPersona"
+                @close="closePersonaSelector"
+            />
 
             <!-- 设置面板 -->
             <settings
