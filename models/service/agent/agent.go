@@ -20,6 +20,29 @@ type AgentService struct {
 	maxMsgs      int
 }
 
+// deepThinkingPromptSuffix 深度思考模式（免费模型）注入的提示
+// 要求模型输出 【思考】...【回答】... 结构，供后端流式解析
+const deepThinkingPromptSuffix = `
+
+【深度思考模式（严格遵守）】
+你必须严格按下面的两段式输出，两个标签必须成对出现，且严格使用中文全角括号"【】"：
+
+【思考】
+在此处逐步分析用户问题：
+- 拆解意图
+- 判断是否需要调用工具（如天气、缩写词、计算、文件解析等实时/外部信息一律必须调用工具，不得凭空作答）
+- 若需要工具，说明为什么，并想好工具名与 input 参数
+
+【回答】
+- 若需要调用工具：本段**只能**输出严格的 JSON，形如 {"tool":"工具名","input":"参数"}，不得包含任何其他文字、Markdown、代码块、解释或标签。
+- 若无需工具：本段直接给出面向用户的自然语言最终答复。
+
+【严禁事项】
+- 严禁编造实时数据（例如天气、股价、时间）。任何实时或外部信息必须走工具。
+- 【回答】段之后不得再输出任何内容。
+- 不得省略或改写"【思考】"与"【回答】"这两个标签。
+`
+
 // NewAgentService 创建 Agent 服务
 func NewAgentService(ollamaSvc *OllamaService, zhipuSvc *ZhipuService, toolManager *ToolManager, budgetMode string) *AgentService {
 	systemPrompt := `
@@ -92,31 +115,29 @@ func (s *AgentService) Process(ctx context.Context, userMessage string, history 
 
 	log.Info(ctx, "开始处理用户消息: %s", userMessage)
 
-	// 调用大模型
+	// 调用大模型：优先智谱，失败降级 Ollama
 	var resp string
 	var err error
 
-	// 优先使用 Ollama，如果不可用则直接使用智谱清言
-	if s.ollamaSvc != nil {
-		resp, err = s.ollamaSvc.Chat(ctx, msgs)
-		if err != nil {
-			log.Warn(ctx, "Ollama调用失败: %v，尝试智谱后备", err)
-		}
-	} else {
-		log.Info(ctx, "Ollama服务不可用，直接使用智谱清言")
-	}
-
-	// 如果 Ollama 失败或不可用，尝试智谱后备
-	if resp == "" && s.zhipuSvc != nil {
+	if s.zhipuSvc != nil {
 		resp, err = s.zhipuSvc.Chat(ctx, convertToZhipuMessages(msgs))
 		if err != nil {
-			log.Error(ctx, "智谱清言调用失败: %v", err)
-			return "服务暂时不可用，请稍后重试"
+			log.Warn(ctx, "智谱调用失败: %v，尝试 Ollama 兜底", err)
+		} else if resp != "" {
+			log.Info(ctx, "智谱清言响应成功")
 		}
-		log.Info(ctx, "智谱清言响应成功")
-	} else if resp == "" && s.zhipuSvc == nil {
-		log.Error(ctx, "Ollama和智谱清言都不可用")
-		return "服务暂时不可用，请配置 Ollama 或智谱清言API"
+	}
+
+	if resp == "" && s.ollamaSvc != nil {
+		resp, err = s.ollamaSvc.Chat(ctx, msgs)
+		if err != nil {
+			log.Error(ctx, "Ollama 调用失败: %v", err)
+		}
+	}
+
+	if resp == "" {
+		log.Error(ctx, "智谱和 Ollama 均不可用")
+		return "服务暂时不可用，请稍后重试"
 	}
 
 	log.Info(ctx, "大模型响应: %s", resp)
@@ -569,4 +590,330 @@ func (s *AgentService) trimHistory(history []api.Message, userMessage string) []
 		trimmed[len(keptReversed)-1-i] = keptReversed[i]
 	}
 	return trimmed
+}
+
+// StreamMode 流式模式
+type StreamMode string
+
+const (
+	StreamModeThinking StreamMode = "thinking" // 深度思考：注入思考标签，流式切分 thought/answer
+	StreamModeAuto     StreamMode = "auto"     // Auto：纯流式答案，不注入思考标签
+)
+
+// ProcessStream 流式处理用户消息
+// history: 历史消息（不含当前 user 消息）
+// mode: thinking / auto
+// chunkCh: 用于推送流式片段；调用方负责关闭（本函数结束时不 close）
+// 返回值：完整的 thought、answer（供上层持久化）
+func (s *AgentService) ProcessStream(ctx context.Context, userMessage string, history []api.Message, mode StreamMode, chunkCh chan<- StreamChunk) (thought string, answer string) {
+	// 组装系统提示
+	sysPrompt := s.systemPrompt
+	if mode == StreamModeThinking {
+		// 免费模型走标签方案；付费模型走原生 reasoning，标签方案对付费模型无害
+		sysPrompt = s.systemPrompt + deepThinkingPromptSuffix
+	}
+
+	msgs := []api.Message{{Role: "system", Content: sysPrompt}}
+	trimmed := s.trimHistory(history, userMessage)
+	msgs = append(msgs, trimmed...)
+	msgs = append(msgs, api.Message{Role: "user", Content: userMessage})
+
+	// 第一次流式生成
+	var streamErr error
+	if s.zhipuSvc != nil {
+		if err := s.streamViaZhipu(ctx, msgs, mode, chunkCh, &thought, &answer); err == nil {
+			streamErr = nil
+		} else {
+			log.Warn(ctx, "ProcessStream: 智谱流式失败，降级 Ollama: %v", err)
+			streamErr = err
+		}
+	}
+	if answer == "" && s.ollamaSvc != nil {
+		if err := s.streamViaOllama(ctx, msgs, mode, chunkCh, &thought, &answer); err == nil {
+			streamErr = nil
+		} else {
+			log.Error(ctx, "ProcessStream: Ollama 流式失败: %v", err)
+			streamErr = err
+		}
+	}
+
+	// 记录首次响应
+	log.Info(ctx, "ProcessStream: 第一次响应 thoughtLen=%d answerLen=%d answer=%q", len(thought), len(answer), truncateForLog(answer, 500))
+
+	if answer == "" && thought == "" {
+		if streamErr != nil {
+			chunkCh <- StreamChunk{Type: ChunkError, Content: streamErr.Error()}
+		} else {
+			chunkCh <- StreamChunk{Type: ChunkError, Content: "服务暂时不可用，请稍后重试"}
+		}
+		return
+	}
+
+	// 工具调用检测：answer 是否是工具调用格式
+	toolName, toolInput, isToolCall := ParseToolCallFromResponse(strings.TrimSpace(answer))
+	if isToolCall {
+		log.Info(ctx, "ProcessStream: 检测到工具调用 tool=%s input=%s", toolName, toolInput)
+
+		// 通知前端清空 answer 累积（把工具 JSON 抹掉）
+		chunkCh <- StreamChunk{Type: ChunkAnswerReset}
+		// 推 tool_call
+		chunkCh <- StreamChunk{Type: ChunkToolCall, Tool: toolName, ToolInput: toolInput, Content: toolInput}
+
+		// 执行工具（Process 里的 executeToolAndSummarize 会对 weather 做多城市拆分并返回汇总文本；这里我们直接调 toolManager 保持简单，多城市能力后续补）
+		toolResult := s.toolManager.Execute(ctx, toolName, toolInput)
+		log.Info(ctx, "ProcessStream: 工具结果 tool=%s resultLen=%d", toolName, len(toolResult))
+
+		// 推 tool_result（一次性）
+		chunkCh <- StreamChunk{Type: ChunkToolResult, Tool: toolName, Content: toolResult}
+
+		// 第二次流式：让模型基于工具结果给出面向用户的答复
+		secondMsgs := []api.Message{
+			{Role: "system", Content: sysPrompt},
+			{Role: "user", Content: fmt.Sprintf("用户问题：%s\n\n工具「%s」的执行结果如下：\n%s\n\n请仅基于工具结果，用自然语言回答用户问题。禁止再输出任何工具调用 JSON。", userMessage, toolName, toolResult)},
+		}
+		// 二次调用时使用普通答案（不再输出思考标签），采用 Auto 语义
+		var secondThought, secondAnswer string
+		if s.zhipuSvc != nil {
+			if err := s.streamViaZhipu(ctx, secondMsgs, StreamModeAuto, chunkCh, &secondThought, &secondAnswer); err != nil {
+				log.Warn(ctx, "ProcessStream: 二次流式失败，降级 Ollama: %v", err)
+				secondAnswer = ""
+			}
+		}
+		if secondAnswer == "" && s.ollamaSvc != nil {
+			_ = s.streamViaOllama(ctx, secondMsgs, StreamModeAuto, chunkCh, &secondThought, &secondAnswer)
+		}
+		if secondAnswer == "" {
+			// 兜底：直接把工具原文当答案
+			secondAnswer = toolResult
+			chunkCh <- StreamChunk{Type: ChunkAnswer, Content: toolResult}
+		}
+		log.Info(ctx, "ProcessStream: 二次响应 answerLen=%d answer=%q", len(secondAnswer), truncateForLog(secondAnswer, 500))
+		// 覆盖 answer 用于上层持久化
+		answer = secondAnswer
+	}
+
+	return
+}
+
+// truncateForLog 截断字符串用于日志输出
+func truncateForLog(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "...(truncated)"
+}
+
+// streamViaZhipu 通过智谱流式生成
+func (s *AgentService) streamViaZhipu(ctx context.Context, msgs []api.Message, mode StreamMode, chunkCh chan<- StreamChunk, thoughtOut, answerOut *string) error {
+	// 判断是否走原生 reasoning
+	preferReasoning := mode == StreamModeThinking
+	model, apiKey, isReasoning := s.zhipuSvc.SelectModelAndKey(preferReasoning)
+	log.Info(ctx, "streamViaZhipu: model=%s reasoning=%v mode=%s", model, isReasoning, mode)
+
+	tokenCh := make(chan string, 32)
+	reasoningCh := make(chan string, 32)
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- s.zhipuSvc.ChatStream(ctx, convertToZhipuMessages(msgs), model, apiKey, tokenCh, reasoningCh)
+		close(tokenCh)
+		close(reasoningCh)
+	}()
+
+	// Auto 模式：不解析思考标签，全部作为 answer
+	if mode == StreamModeAuto {
+		var ab strings.Builder
+		tokenCount := 0
+		for tokenCh != nil || reasoningCh != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case tk, ok := <-tokenCh:
+				if !ok {
+					tokenCh = nil
+					continue
+				}
+				ab.WriteString(tk)
+				tokenCount++
+				chunkCh <- StreamChunk{Type: ChunkAnswer, Content: tk}
+			case _, ok := <-reasoningCh:
+				if !ok {
+					reasoningCh = nil
+					continue
+				}
+			}
+		}
+		log.Info(ctx, "streamViaZhipu(auto): tokens=%d totalLen=%d", tokenCount, ab.Len())
+		*answerOut = ab.String()
+		return <-errCh
+	}
+
+	// Thinking 模式
+	if isReasoning {
+		// 付费模型原生 reasoning：直接分发
+		var tb, ab strings.Builder
+		for tokenCh != nil || reasoningCh != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case tk, ok := <-tokenCh:
+				if !ok {
+					tokenCh = nil
+					continue
+				}
+				ab.WriteString(tk)
+				chunkCh <- StreamChunk{Type: ChunkAnswer, Content: tk}
+			case rc, ok := <-reasoningCh:
+				if !ok {
+					reasoningCh = nil
+					continue
+				}
+				tb.WriteString(rc)
+				chunkCh <- StreamChunk{Type: ChunkThought, Content: rc}
+			}
+		}
+		*thoughtOut = tb.String()
+		*answerOut = ab.String()
+		return <-errCh
+	}
+
+	// 免费模型：通过标签解析器切分
+	parser := NewTagStreamParser()
+	relayCh := make(chan StreamChunk, 64)
+	var tb, ab strings.Builder
+	done := make(chan struct{})
+	go func() {
+		for c := range relayCh {
+			if c.Type == ChunkThought {
+				tb.WriteString(c.Content)
+			} else if c.Type == ChunkAnswer {
+				ab.WriteString(c.Content)
+			}
+			chunkCh <- c
+		}
+		close(done)
+	}()
+
+	for tokenCh != nil {
+		select {
+		case <-ctx.Done():
+			close(relayCh)
+			<-done
+			return ctx.Err()
+		case tk, ok := <-tokenCh:
+			if !ok {
+				tokenCh = nil
+				continue
+			}
+			parser.Feed(tk, relayCh)
+		}
+	}
+	parser.Flush(relayCh)
+	close(relayCh)
+	<-done
+	*thoughtOut = tb.String()
+	*answerOut = ab.String()
+	return <-errCh
+}
+
+// streamViaOllama 通过 Ollama 流式生成（兜底）
+func (s *AgentService) streamViaOllama(ctx context.Context, msgs []api.Message, mode StreamMode, chunkCh chan<- StreamChunk, thoughtOut, answerOut *string) error {
+	tokenCh := make(chan string, 32)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.ollamaSvc.ChatStream(ctx, msgs, tokenCh)
+		close(tokenCh)
+	}()
+
+	if mode == StreamModeAuto {
+		var ab strings.Builder
+		for tk := range tokenCh {
+			ab.WriteString(tk)
+			chunkCh <- StreamChunk{Type: ChunkAnswer, Content: tk}
+		}
+		*answerOut = ab.String()
+		return <-errCh
+	}
+
+	parser := NewTagStreamParser()
+	relayCh := make(chan StreamChunk, 64)
+	var tb, ab strings.Builder
+	done := make(chan struct{})
+	go func() {
+		for c := range relayCh {
+			if c.Type == ChunkThought {
+				tb.WriteString(c.Content)
+			} else if c.Type == ChunkAnswer {
+				ab.WriteString(c.Content)
+			}
+			chunkCh <- c
+		}
+		close(done)
+	}()
+
+	for tk := range tokenCh {
+		parser.Feed(tk, relayCh)
+	}
+	parser.Flush(relayCh)
+	close(relayCh)
+	<-done
+	*thoughtOut = tb.String()
+	*answerOut = ab.String()
+	return <-errCh
+}
+
+// GenerateTitle 根据首条 user 消息和 AI 答案生成 15 字内的会话标题
+// 若生成失败或不可用，返回空串（调用方处理）
+func (s *AgentService) GenerateTitle(ctx context.Context, userMessage, aiAnswer string) string {
+	if strings.TrimSpace(userMessage) == "" {
+		return ""
+	}
+	// 截取 AI 答案前 200 字，避免过长
+	ai := aiAnswer
+	if len([]rune(ai)) > 200 {
+		r := []rune(ai)
+		ai = string(r[:200])
+	}
+	prompt := fmt.Sprintf("请为以下对话生成一个15个字以内的标题，不要引号、不要标点、不要解释：\n\n用户：%s\nAI：%s\n\n标题：", userMessage, ai)
+	msgs := []zhipuMessage{
+		{Role: "system", Content: "你是标题生成器，只输出标题本身，不含引号和标点。最多15个字。"},
+		{Role: "user", Content: prompt},
+	}
+
+	if s.zhipuSvc != nil {
+		// 使用免费模型即可，快速便宜
+		model := s.zhipuSvc.config.Model
+		apiKey := s.zhipuSvc.config.APIKey
+		if title, err := s.zhipuSvc.ChatWithModel(ctx, msgs, model, apiKey, 40); err == nil {
+			return cleanTitle(title)
+		} else {
+			log.Warn(ctx, "GenerateTitle: 智谱调用失败 err=%v", err)
+		}
+	}
+
+	if s.ollamaSvc != nil {
+		apiMsgs := []api.Message{
+			{Role: "system", Content: "你是标题生成器，只输出标题本身，不含引号和标点。最多15个字。"},
+			{Role: "user", Content: prompt},
+		}
+		if title, err := s.ollamaSvc.Chat(ctx, apiMsgs); err == nil {
+			return cleanTitle(title)
+		}
+	}
+	return ""
+}
+
+// cleanTitle 清理标题结果
+func cleanTitle(s string) string {
+	s = strings.TrimSpace(s)
+	// 去除首尾引号
+	trimChars := "\"'`「」【】《》。，,.！!？?：: \n\r\t"
+	s = strings.Trim(s, trimChars)
+	// 截断到 15 字符（rune）
+	r := []rune(s)
+	if len(r) > 15 {
+		s = string(r[:15])
+	}
+	return s
 }

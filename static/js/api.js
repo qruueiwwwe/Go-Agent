@@ -5,6 +5,68 @@
 const API_BASE_URL = '/api';
 
 /**
+ * 解析 JWT 载荷（不做签名校验，仅用于本地判断过期）
+ */
+function parseJwtPayload(token) {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    try {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+        return JSON.parse(json);
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * 判断本地 JWT 是否已过期（考虑 10 秒时钟偏差）
+ */
+export function isTokenExpiredLocally() {
+    const token = localStorage.getItem('token');
+    if (!token) return true;
+    const payload = parseJwtPayload(token);
+    if (!payload || !payload.exp) return false; // 无 exp 时假定未过期，让服务端决定
+    const nowSec = Math.floor(Date.now() / 1000);
+    return payload.exp <= nowSec + 10;
+}
+
+/**
+ * 处理认证失效：清除本地状态并跳转到登录页
+ * pendingInput 会写入 sessionStorage，登录后可以取回
+ */
+function handleAuthExpired(pendingInput) {
+    // 避免重复触发
+    if (window.__authRedirectDone) return;
+    window.__authRedirectDone = true;
+
+    if (pendingInput) {
+        try { sessionStorage.setItem('pendingChatInput', pendingInput); } catch (_) {}
+    }
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    // 保存来源，登录后跳回
+    try { sessionStorage.setItem('postLoginRedirect', location.pathname + location.search); } catch (_) {}
+    location.href = '/login.html';
+}
+
+/**
+ * 认证失效专用错误
+ */
+export class AuthExpiredError extends Error {
+    constructor(msg = '登录已过期') {
+        super(msg);
+        this.name = 'AuthExpiredError';
+    }
+}
+
+/**
  * 判断错误是否可重试
  * @param {Error} error - 错误对象
  * @returns {boolean} 是否可重试
@@ -45,8 +107,12 @@ async function request(endpoint, options = {}, retryOptions = {}) {
     const { maxRetries = 3, retryDelay = 1000 } = retryOptions;
     const url = `${API_BASE_URL}${endpoint}`;
     
-    // 获取 token
+    // 获取 token 并做本地过期预检
     const token = localStorage.getItem('token');
+    if (token && isTokenExpiredLocally()) {
+        handleAuthExpired();
+        throw new AuthExpiredError();
+    }
     
     const defaultOptions = {
         method: 'GET',
@@ -88,15 +154,19 @@ async function request(endpoint, options = {}, retryOptions = {}) {
             if (!response.ok) {
                 // 401 表示未授权，跳转到登录页
                 if (response.status === 401) {
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('user');
-                    window.location.href = '/login.html';
-                    throw new Error('登录已过期，请重新登录');
+                    handleAuthExpired();
+                    throw new AuthExpiredError();
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+
+            // 后端约定：认证失败返回 HTTP 200 + errno=401
+            if (data.errno === 401) {
+                handleAuthExpired();
+                throw new AuthExpiredError(data.errmsg || '登录已过期');
+            }
 
             // 检查业务状态码（errno === 0 表示成功）
             if (data.errno !== 0) {
@@ -106,6 +176,11 @@ async function request(endpoint, options = {}, retryOptions = {}) {
             return data;
         } catch (error) {
             lastError = error;
+
+            // 认证失效直接抛出，不做重试也不打印
+            if (error instanceof AuthExpiredError) {
+                throw error;
+            }
             
             // 超时错误
             if (error.name === 'AbortError') {
@@ -131,19 +206,198 @@ async function request(endpoint, options = {}, retryOptions = {}) {
  */
 export const chatAPI = {
     /**
-     * 发送聊天消息
+     * 发送聊天消息（普通模式，非流式）
      * @param {string} message - 消息内容
-     * @param {Array} history - 消息历史
+     * @param {string|null} sessionId - 会话ID（可选）
      * @param {Object} retryOptions - 重试选项
-     * @returns {Promise<Object>} 响应数据
+     * @returns {Promise<{result:string, session_id:string, title?:string}>}
      */
-    async send(message, history = [], retryOptions = { maxRetries: 2, retryDelay: 500 }) {
+    async send(message, sessionId = null, retryOptions = { maxRetries: 2, retryDelay: 500 }) {
+        const body = { message };
+        if (sessionId) body.session_id = sessionId;
         const response = await request('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, history })
+            body: JSON.stringify(body)
         }, retryOptions);
-        
         return response.data || response;
+    },
+
+    /**
+     * 流式发送（深度思考 / Auto 模式）
+     * @param {string} message
+     * @param {Object} opts
+     *   sessionId?: string
+     *   mode: 'thinking' | 'auto'
+     *   onSession(sessionId, title)
+     *   onThought(text)
+     *   onAnswer(text)
+     *   onAnswerReset()  -- 后端要求前端清空 answer 累积（工具调用重放）
+     *   onToolCall({tool, tool_input})
+     *   onToolResult({tool, content})
+     *   onTitle(title)
+     *   onDone(sessionId)
+     *   onError(msg)
+     *   signal?: AbortSignal
+     */
+    async stream(message, opts = {}) {
+        const {
+            sessionId = null,
+            mode = 'thinking',
+            onSession, onThought, onAnswer, onAnswerReset,
+            onToolCall, onToolResult,
+            onTitle, onDone, onError,
+            signal
+        } = opts;
+
+        const token = localStorage.getItem('token');
+
+        // 本地过期预检：不发起请求直接跳登录并保存草稿
+        if (isTokenExpiredLocally()) {
+            handleAuthExpired(message);
+            if (onError) onError('登录已过期，正在跳转登录页');
+            return;
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const body = { message };
+        if (sessionId) body.session_id = sessionId;
+
+        let resp;
+        try {
+            resp = await fetch(`${API_BASE_URL}/chat/stream?mode=${encodeURIComponent(mode)}`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal
+            });
+        } catch (err) {
+            if (onError) onError(err.message || '连接失败');
+            return;
+        }
+
+        // 认证失效可能以 HTTP 401 或 200+JSON(errno=401) 两种形式返回
+        if (resp.status === 401) {
+            handleAuthExpired(message);
+            if (onError) onError('登录已过期，正在跳转登录页');
+            return;
+        }
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!contentType.includes('text/event-stream')) {
+            // 服务端未升级成 SSE，通常是校验失败的 JSON 应答
+            try {
+                const data = await resp.json();
+                if (data.errno === 401) {
+                    handleAuthExpired(message);
+                    if (onError) onError('登录已过期，正在跳转登录页');
+                    return;
+                }
+                if (onError) onError(data.errmsg || `HTTP ${resp.status}`);
+            } catch (_) {
+                if (onError) onError(`HTTP ${resp.status}`);
+            }
+            return;
+        }
+
+        if (!resp.ok) {
+            try {
+                const data = await resp.json();
+                if (onError) onError(data.errmsg || `HTTP ${resp.status}`);
+            } catch (_) {
+                if (onError) onError(`HTTP ${resp.status}`);
+            }
+            return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buf = '';
+
+        while (true) {
+            let readResult;
+            try {
+                readResult = await reader.read();
+            } catch (err) {
+                if (onError) onError(err.message || '连接中断');
+                return;
+            }
+            const { value, done } = readResult;
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+
+            // 按 SSE 空行拆帧
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+                const frame = buf.slice(0, idx);
+                buf = buf.slice(idx + 2);
+                const line = frame.split('\n');
+                let eventName = 'message';
+                let dataStr = '';
+                for (const l of line) {
+                    if (l.startsWith('event:')) {
+                        eventName = l.slice(6).trim();
+                    } else if (l.startsWith('data:')) {
+                        dataStr += l.slice(5).trim();
+                    }
+                }
+                if (!dataStr) continue;
+                let data;
+                try {
+                    data = JSON.parse(dataStr);
+                } catch (_) {
+                    continue;
+                }
+                switch (eventName) {
+                    case 'session':
+                        if (onSession) onSession(data.session_id, data.title || '');
+                        break;
+                    case 'thought':
+                        if (onThought) onThought(data.content || '');
+                        break;
+                    case 'answer':
+                        if (onAnswer) onAnswer(data.content || '');
+                        break;
+                    case 'answer_reset':
+                        if (onAnswerReset) onAnswerReset();
+                        break;
+                    case 'tool_call':
+                        if (onToolCall) onToolCall(data);
+                        break;
+                    case 'tool_result':
+                        if (onToolResult) onToolResult(data);
+                        break;
+                    case 'title':
+                        if (onTitle) onTitle(data.title || '');
+                        break;
+                    case 'done':
+                        if (onDone) onDone(data.session_id);
+                        return;
+                    case 'error':
+                        if (onError) onError(data.content || '出错了');
+                        return;
+                }
+            }
+        }
+        if (onDone) onDone(sessionId);
+    },
+
+    /** 获取当前用户的会话列表 */
+    async getChatList(page = 1, size = 20) {
+        const response = await request('/getchatlist', {
+            method: 'POST',
+            body: JSON.stringify({ page, size })
+        });
+        return response.data || { total: 0, list: [] };
+    },
+
+    /** 获取指定会话的消息 */
+    async getChatHistory(sessionId, limit = 200) {
+        const response = await request('/getchathistory', {
+            method: 'POST',
+            body: JSON.stringify({ session_id: sessionId, limit })
+        });
+        return response.data;
     }
 };
 

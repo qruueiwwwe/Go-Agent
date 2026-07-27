@@ -99,36 +99,66 @@ export const MessageItem = defineComponent({
          * 渲染 Markdown 内容
          */
         renderMarkdownContent() {
-            const { content, type } = this.message;
-            
+            const { content, type, thought, streaming } = this.message;
+
             // 用户消息：不渲染 Markdown，保留换行
             if (type === 'user') {
-                return h('div', { class: 'message-text' }, 
-                    content.split('\n').map((line, i, arr) => 
-                        i < arr.length - 1 
+                return h('div', { class: 'message-text' },
+                    content.split('\n').map((line, i, arr) =>
+                        i < arr.length - 1
                             ? [line, h('br')]
                             : line
                     ).flat()
                 );
             }
-            
+
             // 错误消息：简单显示
             if (type === 'error') {
                 return h('div', { class: 'message-text' }, content);
             }
-            
+
             // 系统消息：简单显示
             if (type === 'system') {
                 return h('div', { class: 'message-text' }, content);
             }
-            
-            // 助手消息：渲染 Markdown
-            const html = renderMarkdown(content);
-            return h('div', {
-                class: 'message-text markdown-body',
-                innerHTML: html,
-                ref: 'contentRef'
-            });
+
+            // 助手消息：可能带思考链
+            const children = [];
+            if (thought && thought.length > 0) {
+                children.push(h('details', {
+                    class: 'thought-block',
+                    open: !!streaming
+                }, [
+                    h('summary', { class: 'thought-summary' }, streaming ? '深度思考中…' : '深度思考'),
+                    h('div', { class: 'thought-content' }, thought)
+                ]));
+            }
+
+            // 工具调用徽章
+            const toolCalls = this.message.toolCalls;
+            if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+                for (const tc of toolCalls) {
+                    children.push(h('details', { class: 'tool-block', open: false }, [
+                        h('summary', { class: 'tool-summary' }, `🛠 调用工具: ${tc.tool}${tc.input ? '(' + tc.input + ')' : ''}`),
+                        h('div', { class: 'tool-content' }, tc.result || '（无返回）')
+                    ]));
+                }
+            }
+
+            // 答案区
+            if (content) {
+                const html = renderMarkdown(content);
+                children.push(h('div', {
+                    class: ['message-text', 'markdown-body', streaming && 'streaming'].filter(Boolean).join(' '),
+                    innerHTML: html + (streaming ? '<span class="stream-cursor">▍</span>' : ''),
+                    ref: 'contentRef'
+                }));
+            } else if (streaming && !thought) {
+                children.push(h('div', { class: 'message-text streaming' }, [
+                    h('span', { class: 'stream-cursor' }, '▍')
+                ]));
+            }
+            return h('div', { class: 'assistant-body' }, children);
         },
         
         /**

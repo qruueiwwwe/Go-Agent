@@ -80,6 +80,18 @@ export const ChatWindow = defineComponent({
         showTimestamp: {
             type: Boolean,
             default: true
+        },
+        chatMode: {
+            type: String,
+            default: 'normal'
+        },
+        canUseThinking: {
+            type: Boolean,
+            default: false
+        },
+        canUseAuto: {
+            type: Boolean,
+            default: false
         }
     },
 
@@ -196,7 +208,11 @@ export const ChatWindow = defineComponent({
             // 输入区
             h(InputArea, {
                 disabled: this.loading,
-                onSend: this.handleSend
+                chatMode: this.chatMode,
+                canUseThinking: this.canUseThinking,
+                canUseAuto: this.canUseAuto,
+                onSend: this.handleSend,
+                onChangeMode: (mode) => this.$emit('change-mode', mode)
             }),
 
             // Toast 容器

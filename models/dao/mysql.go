@@ -116,6 +116,71 @@ func (m *MySQL) AutoMigrate(ctx context.Context) error {
 
 	log.Info(ctx, "AutoMigrate: 数据库迁移完成")
 
+	// 通用对话会话与消息表（深度思考模式使用）
+	createChatSessionsTable := `
+	CREATE TABLE IF NOT EXISTS chat_sessions (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		session_id VARCHAR(64) NOT NULL UNIQUE COMMENT '会话业务主键(UUID)',
+		user_id BIGINT NOT NULL COMMENT '所属用户',
+		title VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'AI 生成的会话标题',
+		mode VARCHAR(16) NOT NULL DEFAULT 'normal' COMMENT '模式: normal/thinking/auto',
+		last_message_at DATETIME NULL COMMENT '最后一条消息时间',
+		status TINYINT NOT NULL DEFAULT 1 COMMENT '1-正常 0-归档 -1-软删',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		INDEX idx_user_status (user_id, status, last_message_at DESC)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用对话会话';
+	`
+	if _, err := m.db.ExecContext(ctx, createChatSessionsTable); err != nil {
+		log.Error(ctx, "AutoMigrate: 创建 chat_sessions 失败 err=%v", err)
+		return fmt.Errorf("创建 chat_sessions 失败: %v", err)
+	}
+
+	createChatMessagesTable := `
+	CREATE TABLE IF NOT EXISTS chat_messages (
+		id BIGINT PRIMARY KEY AUTO_INCREMENT,
+		session_id VARCHAR(64) NOT NULL COMMENT '关联的会话ID',
+		role VARCHAR(16) NOT NULL COMMENT 'user/assistant/system',
+		content MEDIUMTEXT NOT NULL COMMENT '消息内容',
+		thought_content MEDIUMTEXT NULL COMMENT '思考过程（仅深度思考模式）',
+		tool_calls TEXT NULL COMMENT '工具调用JSON',
+		mode VARCHAR(16) NOT NULL DEFAULT 'normal' COMMENT '产生该消息的模式: normal/thinking/auto',
+		status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-成功 2-进行中 3-失败',
+		token_count INT DEFAULT 0 COMMENT 'token 数量',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_session (session_id, id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用对话消息';
+	`
+	if _, err := m.db.ExecContext(ctx, createChatMessagesTable); err != nil {
+		log.Error(ctx, "AutoMigrate: 创建 chat_messages 失败 err=%v", err)
+		return fmt.Errorf("创建 chat_messages 失败: %v", err)
+	}
+	log.Info(ctx, "AutoMigrate: 通用对话表(chat_sessions/chat_messages)迁移完成")
+
+	// 兼容旧表：为已存在的 chat_messages 表补充 mode/status 字段
+	addColumnIfNotExistsGeneric := func(tableName, columnName, columnDef string) {
+		var count int
+		err := m.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+			tableName, columnName).Scan(&count)
+		if err != nil {
+			log.Warn(ctx, "AutoMigrate: 检查字段失败 table=%s, column=%s, err=%v", tableName, columnName, err)
+			return
+		}
+		if count == 0 {
+			_, err := m.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", tableName, columnDef))
+			if err != nil {
+				log.Warn(ctx, "AutoMigrate: 添加字段失败 table=%s, column=%s, err=%v", tableName, columnName, err)
+			} else {
+				log.Info(ctx, "AutoMigrate: 添加字段成功 table=%s, column=%s", tableName, columnName)
+			}
+		}
+	}
+	addColumnIfNotExistsGeneric("chat_messages", "mode",
+		"mode VARCHAR(16) NOT NULL DEFAULT 'normal' COMMENT '产生该消息的模式: normal/thinking/auto'")
+	addColumnIfNotExistsGeneric("chat_messages", "status",
+		"status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-成功 2-进行中 3-失败'")
+
 	// 添加软删除字段（兼容已有表）
 	addColumnIfNotExists := func(tableName, columnName, columnDef string) {
 		var count int

@@ -143,8 +143,19 @@ func main() {
 	if zhipuAPIKey != "" && cfg.Zhipu.Enable {
 		zhipuCfg := cfg.Zhipu
 		zhipuCfg.APIKey = zhipuAPIKey
+		// 读取新版付费 API Key（用于原生深度思考模型）
+		if newKey := os.Getenv("ZHIPU_NEW_API_KEY"); newKey != "" {
+			zhipuCfg.NewAPIKey = newKey
+		}
+		if rm := os.Getenv("ZHIPU_REASONING_MODEL"); rm != "" {
+			zhipuCfg.ReasoningModel = rm
+		}
 		zhipuSvc = agent.NewZhipuService(zhipuCfg)
-		log.Info(ctx, "智谱清言后备服务初始化成功")
+		if zhipuCfg.IsReasoningEnabled() {
+			log.Info(ctx, "智谱清言服务初始化成功（推理模型可用：%s）", zhipuCfg.ReasoningModel)
+		} else {
+			log.Info(ctx, "智谱清言服务初始化成功（仅免费模型：%s）", zhipuCfg.Model)
+		}
 	} else {
 		log.Warn(ctx, "智谱清言后备服务未启用（未配置ZHIPU_API_KEY）")
 		if ollamaSvc == nil {
@@ -224,7 +235,11 @@ func main() {
 	log.Info(ctx, "Agent 服务初始化完成，CONTEXT_BUDGET=%s", contextBudget)
 
 	// 初始化控制器
-	chatCtrl := controllers.NewChatController(agentSvc, rateLimiter)
+	var chatDAO *dao.ChatDAO
+	if mysql != nil {
+		chatDAO = dao.NewChatDAO(mysql)
+	}
+	chatCtrl := controllers.NewChatController(agentSvc, rateLimiter, chatDAO)
 	toolCtrl := controllers.NewToolController(toolManager)
 	log.Info(ctx, "控制器初始化完成")
 

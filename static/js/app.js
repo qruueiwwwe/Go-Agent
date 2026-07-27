@@ -7,7 +7,7 @@ import { FileManager } from './components/FileManager.js';
 import { Settings } from './components/Settings.js';
 import { ToastContainer, Toast } from './components/Toast.js';
 import { PersonaSelector } from './components/PersonaSelector.js';
-import API, { errorHandler } from './api.js';
+import API, { errorHandler, AuthExpiredError, isTokenExpiredLocally } from './api.js';
 import { generateId, ThemeManager } from './utils.js';
 
 const { createApp, ref, reactive, computed, nextTick } = Vue;
@@ -54,6 +54,12 @@ const app = createApp({
             
             // 当前会话ID
             currentSessionId: null,
+
+            // 服务端 session_id（后端持久化的会话 UUID）
+            backendSessionId: null,
+
+            // 对话模式：normal / thinking / auto
+            chatMode: localStorage.getItem('chat-mode') || 'normal',
             
             // 当前主题
             currentTheme: 'light',
@@ -79,6 +85,12 @@ const app = createApp({
         userRole() {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             return user.role || 'user';
+        },
+        canUseThinking() {
+            return this.userRole === 'vip' || this.userRole === 'admin';
+        },
+        canUseAuto() {
+            return this.userRole === 'admin';
         }
     },
     
@@ -92,12 +104,24 @@ const app = createApp({
             this.loadSettings();
             this.loadSessions();
 
+            // 恢复登录前未发送的消息草稿
+            let pending = '';
+            try { pending = sessionStorage.getItem('pendingChatInput') || ''; } catch (_) {}
+            if (pending) {
+                sessionStorage.removeItem('pendingChatInput');
+            }
+
             // 仅在空会话时添加欢迎消息，避免污染恢复会话
             if (this.messages.length === 0) {
                 this.addMessage({
                     type: 'assistant',
                     content: '你好！我是智能助手，可以帮你查询天气、进行数学计算或处理文件。\n\n**你可以问我：**\n- 今天北京的天气怎么样？\n- 计算：123 + 456\n- 帮我分析这个文件\n\n有什么可以帮你的吗？'
                 });
+            }
+
+            if (pending) {
+                // 稍作延迟让 UI 就绪
+                setTimeout(() => this.handleSendMessage(pending), 200);
             }
         },
         
@@ -173,6 +197,7 @@ const app = createApp({
             
             this.sessions.unshift(session);
             this.currentSessionId = session.id;
+            this.backendSessionId = null; // 新会话，后端 session_id 待生成
             this.messages = [];
             this.history = [];
             this.saveSessions();
@@ -183,8 +208,25 @@ const app = createApp({
          */
         selectSession(session) {
             this.currentSessionId = session.id;
+            this.backendSessionId = session.backendSessionId || null;
             this.messages = session.messages || [];
             this.rebuildHistoryFromMessages();
+        },
+
+        /**
+         * 切换对话模式
+         */
+        setChatMode(mode) {
+            if (mode === 'thinking' && !this.canUseThinking) {
+                Toast.error('深度思考仅限 VIP / 管理员');
+                return;
+            }
+            if (mode === 'auto' && !this.canUseAuto) {
+                Toast.error('Auto 模式仅限管理员');
+                return;
+            }
+            this.chatMode = mode;
+            localStorage.setItem('chat-mode', mode);
         },
         
         /**
@@ -285,48 +327,141 @@ const app = createApp({
          */
         async handleSendMessage(userMessage) {
             if (!userMessage || !userMessage.trim()) return;
-            
+
+            // 提前拦截：本地即可判定 token 过期，直接跳登录并保留草稿
+            if (isTokenExpiredLocally()) {
+                try { sessionStorage.setItem('pendingChatInput', userMessage); } catch (_) {}
+                Toast.warning('登录已过期，正在跳转登录页');
+                setTimeout(() => { location.href = '/login.html'; }, 300);
+                return;
+            }
+
+            // 权限自动降级
+            let mode = this.chatMode;
+            if (mode === 'thinking' && !this.canUseThinking) mode = 'normal';
+            if (mode === 'auto' && !this.canUseAuto) mode = 'normal';
+
             // 添加用户消息
             this.addMessage({
                 type: 'user',
                 content: userMessage
             });
-            
-            // 设置加载状态
+
             this.loading = true;
-            
+
+            if (mode === 'normal') {
+                await this.sendNormal(userMessage);
+            } else {
+                await this.sendStream(userMessage, mode);
+            }
+            this.loading = false;
+        },
+
+        /**
+         * 普通模式发送（非流式）
+         */
+        async sendNormal(userMessage) {
             try {
-                // 调用聊天 API
-                const response = await API.chat.send(userMessage, this.history);
-                
-                // 提取结果内容
-                let content = '';
-                if (typeof response === 'string') {
-                    content = response;
-                } else if (response.result) {
-                    content = response.result;
-                } else if (response.content) {
-                    content = response.content;
-                } else {
-                    content = JSON.stringify(response);
+                const response = await API.chat.send(userMessage, this.backendSessionId);
+                if (response.session_id) {
+                    this.backendSessionId = response.session_id;
                 }
-                
-                // 添加助手消息
                 this.addMessage({
                     type: 'assistant',
-                    content: content
+                    content: response.result || ''
                 });
+                if (response.title) {
+                    this.updateCurrentSessionTitle(response.title);
+                }
             } catch (error) {
-                // 处理错误
+                // 认证失效已由 API 层自动跳转，不再往聊天里塞错误
+                if (error instanceof AuthExpiredError) return;
                 const errorMsg = errorHandler.handle(error);
-                this.addMessage({
-                    type: 'error',
-                    content: `错误: ${errorMsg}`
-                });
-                
+                this.addMessage({ type: 'error', content: `错误: ${errorMsg}` });
                 errorHandler.log(error, '发送消息失败');
-            } finally {
-                this.loading = false;
+            }
+        },
+
+        /**
+         * 流式发送（thinking / auto）
+         */
+        async sendStream(userMessage, mode) {
+            const draft = {
+                id: generateId(),
+                type: 'assistant',
+                content: '',
+                thought: '',
+                streaming: true,
+                timestamp: Date.now()
+            };
+            this.messages.push(draft);
+            // 从数组取回响应式代理，直接改本地对象不会触发 Vue 3 Proxy 更新
+            const assistantMsg = this.messages[this.messages.length - 1];
+
+            const setStreaming = (v) => { assistantMsg.streaming = v; this.updateCurrentSession(); };
+
+            try {
+                await API.chat.stream(userMessage, {
+                    sessionId: this.backendSessionId,
+                    mode,
+                    onSession: (sid, title) => {
+                        this.backendSessionId = sid;
+                        if (title) this.updateCurrentSessionTitle(title);
+                    },
+                    onThought: (t) => {
+                        assistantMsg.thought = (assistantMsg.thought || '') + t;
+                    },
+                    onAnswer: (t) => {
+                        assistantMsg.content = (assistantMsg.content || '') + t;
+                    },
+                    onAnswerReset: () => {
+                        assistantMsg.content = '';
+                    },
+                    onToolCall: (data) => {
+                        assistantMsg.toolCalls = assistantMsg.toolCalls || [];
+                        assistantMsg.toolCalls.push({
+                            tool: data.tool || '',
+                            input: data.tool_input || data.content || '',
+                            result: ''
+                        });
+                    },
+                    onToolResult: (data) => {
+                        if (!assistantMsg.toolCalls || assistantMsg.toolCalls.length === 0) {
+                            assistantMsg.toolCalls = [{ tool: data.tool || '', input: '', result: data.content || '' }];
+                        } else {
+                            const last = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1];
+                            last.result = data.content || '';
+                        }
+                    },
+                    onTitle: (title) => {
+                        if (title) this.updateCurrentSessionTitle(title);
+                    },
+                    onDone: () => {
+                        setStreaming(false);
+                        // 完成后加入 history
+                        this.history.push({ role: 'user', content: userMessage });
+                        this.history.push({ role: 'assistant', content: assistantMsg.content });
+                        this.playNotificationSound();
+                    },
+                    onError: (msg) => {
+                        assistantMsg.content = `错误: ${msg}`;
+                        assistantMsg.type = 'error';
+                        setStreaming(false);
+                    }
+                });
+            } catch (err) {
+                assistantMsg.content = `错误: ${err.message || '未知错误'}`;
+                assistantMsg.type = 'error';
+                setStreaming(false);
+            }
+        },
+
+        /** 更新当前会话标题 */
+        updateCurrentSessionTitle(title) {
+            const session = this.sessions.find(s => s.id === this.currentSessionId);
+            if (session) {
+                session.title = title;
+                this.saveSessions();
             }
         },
         
@@ -765,6 +900,9 @@ const app = createApp({
                         :files="files"
                         :uploading="uploading"
                         :show-timestamp="showTimestamp"
+                        :chat-mode="chatMode"
+                        :can-use-thinking="canUseThinking"
+                        :can-use-auto="canUseAuto"
                         @send="handleSendMessage"
                         @regenerate="handleRegenerate"
                         @toggle-sidebar="toggleSidebar"
@@ -773,6 +911,7 @@ const app = createApp({
                         @analyze-file="handleAnalyzeFile"
                         @file-error="handleFileError"
                         @open-persona="openPersonaSelector"
+                        @change-mode="setChatMode"
                     />
                 </template>
             </div>

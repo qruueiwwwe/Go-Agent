@@ -36,6 +36,18 @@ export const InputArea = defineComponent({
         placeholder: {
             type: String,
             default: '请输入你的问题...'
+        },
+        chatMode: {
+            type: String,
+            default: 'normal'
+        },
+        canUseThinking: {
+            type: Boolean,
+            default: false
+        },
+        canUseAuto: {
+            type: Boolean,
+            default: false
         }
     },
     
@@ -131,34 +143,64 @@ export const InputArea = defineComponent({
                 this.input = action.template.replace(/\{[^}]+\}/, `[${placeholderText}]`);
             }
             this.$refs.inputRef?.focus();
+        },
+
+        changeMode(mode) {
+            if (mode === this.chatMode) return;
+            this.$emit('change-mode', mode);
         }
     },
     
     render() {
-        return h('div', { class: 'input-area' }, [
-            h('div', { class: 'input-wrapper' }, [
-                h(QuickActions, {
-                    disabled: this.disabled,
-                    onAction: this.handleQuickAction
-                }),
-                h('textarea', {
-                    ref: 'inputRef',
-                    class: 'message-input',
-                    value: this.input,
-                    placeholder: this.placeholder,
-                    disabled: this.disabled,
-                    onInput: this.handleInput,
-                    onKeydown: this.handleKeyDown,
-                    onCompositionstart: this.handleCompositionStart,
-                    onCompositionend: this.handleCompositionEnd
-                })
-            ]),
+        const modeButtons = [
             h('button', {
-                class: ['send-btn'],
-                disabled: this.sendDisabled,
-                onClick: this.handleSend
-            }, [
-                h('span', '发送')
+                class: ['mode-btn', this.chatMode === 'normal' && 'active'],
+                onClick: () => this.changeMode('normal'),
+                title: '普通模式'
+            }, '普通')
+        ];
+        if (this.canUseThinking) {
+            modeButtons.push(h('button', {
+                class: ['mode-btn', this.chatMode === 'thinking' && 'active'],
+                onClick: () => this.changeMode('thinking'),
+                title: '深度思考（VIP/管理员）'
+            }, '深度思考'));
+        }
+        if (this.canUseAuto) {
+            modeButtons.push(h('button', {
+                class: ['mode-btn', this.chatMode === 'auto' && 'active'],
+                onClick: () => this.changeMode('auto'),
+                title: 'Auto 流式（管理员）'
+            }, 'Auto'));
+        }
+
+        return h('div', { class: 'input-area' }, [
+            h('div', { class: 'input-mode-bar' }, modeButtons),
+            h('div', { class: 'input-row' }, [
+                h('div', { class: 'input-wrapper' }, [
+                    h(QuickActions, {
+                        disabled: this.disabled,
+                        onAction: this.handleQuickAction
+                    }),
+                    h('textarea', {
+                        ref: 'inputRef',
+                        class: 'message-input',
+                        value: this.input,
+                        placeholder: this.placeholder,
+                        disabled: this.disabled,
+                        onInput: this.handleInput,
+                        onKeydown: this.handleKeyDown,
+                        onCompositionstart: this.handleCompositionStart,
+                        onCompositionend: this.handleCompositionEnd
+                    })
+                ]),
+                h('button', {
+                    class: ['send-btn'],
+                    disabled: this.sendDisabled,
+                    onClick: this.handleSend
+                }, [
+                    h('span', '发送')
+                ])
             ])
         ]);
     }

@@ -47,6 +47,26 @@ func (s *OllamaService) Chat(ctx context.Context, messages []api.Message) (strin
 	return fullResp, nil
 }
 
+// ChatStream 流式对话，通过 tokenCh 逐步推送 delta 内容
+func (s *OllamaService) ChatStream(ctx context.Context, messages []api.Message, tokenCh chan<- string) error {
+	req := &api.ChatRequest{
+		Model:    s.modelName,
+		Messages: messages,
+		Stream:   func(b bool) *bool { return &b }(true),
+	}
+	err := s.client.Chat(ctx, req, func(res api.ChatResponse) error {
+		if res.Message.Content != "" && tokenCh != nil {
+			tokenCh <- res.Message.Content
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error(ctx, "Ollama ChatStream 失败: %v", err)
+		return err
+	}
+	return nil
+}
+
 // ParseToolCall 解析工具调用
 func (s *OllamaService) ParseToolCall(response string) (toolName, toolInput string, isToolCall bool) {
 	// 尝试提取 JSON 部分（可能有前后文本）

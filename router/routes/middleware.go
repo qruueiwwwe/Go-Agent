@@ -90,6 +90,41 @@ func VIPMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// StreamModeMiddleware 校验流式模式请求权限
+// query 参数 mode 支持：thinking(VIP+Admin)、auto(仅 Admin)
+// 空 mode 默认视作 thinking
+func StreamModeMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims := controllers.GetUserFromContext(r.Context())
+		logid := log.GenerateLogIDWithUser(claims)
+		if claims == nil {
+			respondError(w, 401, "未登录", logid)
+			return
+		}
+		mode := r.URL.Query().Get("mode")
+		if mode == "" {
+			mode = "thinking"
+		}
+		switch mode {
+		case "thinking":
+			if claims.Role != "vip" && claims.Role != "admin" {
+				respondError(w, 403, "深度思考模式仅限 VIP/管理员使用", logid)
+				return
+			}
+		case "auto":
+			if claims.Role != "admin" {
+				respondError(w, 403, "Auto 模式仅限管理员使用", logid)
+				return
+			}
+		default:
+			respondError(w, 400, "不支持的 mode 参数", logid)
+			return
+		}
+		ctx := log.WithLogID(r.Context(), logid)
+		next(w, r.WithContext(ctx))
+	}
+}
+
 // respondError 返回错误响应
 func respondError(w http.ResponseWriter, errno int, errmsg string, logid string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

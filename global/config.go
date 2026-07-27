@@ -74,12 +74,20 @@ type WeatherAPIConfig struct {
 
 // ZhipuConfig 智谱清言配置
 type ZhipuConfig struct {
-	APIKey      string        // API密钥（从环境变量读取）
-	Model       string        // 模型名称
-	BaseURL     string        // API地址
-	Timeout     time.Duration // 超时时间
-	Temperature float64       // 温度参数
-	Enable      bool          // 是否启用后备
+	APIKey         string        // API密钥（从环境变量 ZHIPU_API_KEY 读取，免费模型）
+	NewAPIKey      string        // 新版API密钥（从环境变量 ZHIPU_NEW_API_KEY 读取，付费模型，支持原生 reasoning）
+	Model          string        // 免费模型名称，如 glm-4-flash
+	ReasoningModel string        // 付费推理模型名称，如 glm-4.5
+	BaseURL        string        // API地址
+	Timeout        time.Duration // 超时时间
+	Temperature    float64       // 温度参数
+	Enable         bool          // 是否启用后备
+}
+
+// IsReasoningEnabled 是否启用付费推理模型（NewAPIKey 有效即启用）
+func (c ZhipuConfig) IsReasoningEnabled() bool {
+	k := c.NewAPIKey
+	return k != "" && k != "NULL" && k != "null"
 }
 
 // JWTConfig JWT 配置
@@ -139,12 +147,14 @@ var DefaultConfig = Config{
 		Timeout: 10 * time.Second,
 	},
 	Zhipu: ZhipuConfig{
-		APIKey:      "", // 从环境变量 ZHIPU_API_KEY 读取
-		Model:       "glm-4-flash",
-		BaseURL:     "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-		Timeout:     120 * time.Second, // 增加到 2 分钟
-		Temperature: 0.3,
-		Enable:      true,
+		APIKey:         "", // 从环境变量 ZHIPU_API_KEY 读取
+		NewAPIKey:      "", // 从环境变量 ZHIPU_NEW_API_KEY 读取（付费）
+		Model:          "glm-4-flash",
+		ReasoningModel: "glm-4.5",
+		BaseURL:        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+		Timeout:        120 * time.Second, // 增加到 2 分钟
+		Temperature:    0.3,
+		Enable:         true,
 	},
 	JWT: JWTConfig{
 		Secret:     "", // 从环境变量 JWT_SECRET 读取
