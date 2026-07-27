@@ -70,6 +70,8 @@ func (w *Weather) Execute(ctx context.Context, input string) string {
 
 func (w *Weather) querySingleCity(ctx context.Context, city string, days int) string {
 	log.Info(ctx, "Weather.Execute: 解析结果 city=%s, days=%d", city, days)
+
+	// 优先调用接口盒子API（中国气象局数据）
 	result, err := w.getWeatherFromAPIHZ(ctx, city, days)
 	if err == nil {
 		log.Info(ctx, "Weather.Execute: 接口盒子查询成功 city=%s", city)
@@ -77,6 +79,8 @@ func (w *Weather) querySingleCity(ctx context.Context, city string, days int) st
 	}
 
 	log.Error(ctx, "Weather.Execute: 接口盒子查询失败 city=%s, err=%v", city, err)
+
+	// 接口盒子失败，尝试高德天气API
 	result, err = w.getWeatherFromAmap(ctx, city, days)
 	if err == nil {
 		log.Info(ctx, "Weather.Execute: 高德API查询成功 city=%s", city)
@@ -84,6 +88,8 @@ func (w *Weather) querySingleCity(ctx context.Context, city string, days int) st
 	}
 
 	log.Error(ctx, "Weather.Execute: 高德API查询失败 city=%s, err=%v", city, err)
+
+	// 两个都失败
 	return fmt.Sprintf("查询「%s」天气失败：%s", city, err.Error())
 }
 

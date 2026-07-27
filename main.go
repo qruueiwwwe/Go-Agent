@@ -255,19 +255,19 @@ func main() {
 	}
 
 	// 初始化路由
-	r := router.NewRouter(chatCtrl, toolCtrl)
-	r.SetStaticFS(StaticFS()) // 使用嵌入的静态文件
-	if authCtrl != nil && authSvc != nil {
-		r.SetAuth(authCtrl, authSvc)
-	}
-	if adminCtrl != nil {
-		r.SetAdmin(adminCtrl)
-	}
-	if personaCtrl != nil {
-		r.SetPersona(personaCtrl)
+	r := router.NewRouter()
+	if authSvc != nil {
+		r.SetAuth(authSvc)
 	}
 	mux := http.NewServeMux()
-	r.RegisterRoutes(mux)
+	r.RegisterRoutes(mux, router.RoutesDeps{
+		ChatCtrl:    chatCtrl,
+		ToolCtrl:    toolCtrl,
+		AuthCtrl:    authCtrl,
+		AdminCtrl:   adminCtrl,
+		PersonaCtrl: personaCtrl,
+		StaticFS:    StaticFS(),
+	})
 
 	// 优雅退出
 	go func() {
