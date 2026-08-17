@@ -140,14 +140,14 @@ func (c *PersonaController) PersonaUpdate(ctx context.Context, w http.ResponseWr
 	}
 
 	var req struct {
-		ID           int64               `json:"id"`
-		Name         string              `json:"name"`
-		Avatar       string              `json:"avatar,omitempty"`
-		Tagline      string              `json:"tagline,omitempty"`
-		Personality  string              `json:"personality,omitempty"`
-		SystemPrompt string              `json:"system_prompt"`
-		IsPublic     bool                `json:"is_public"`
-		Examples     []entity.Example    `json:"examples,omitempty"`
+		ID           int64            `json:"id"`
+		Name         string           `json:"name"`
+		Avatar       string           `json:"avatar,omitempty"`
+		Tagline      string           `json:"tagline,omitempty"`
+		Personality  string           `json:"personality,omitempty"`
+		SystemPrompt string           `json:"system_prompt"`
+		IsPublic     bool             `json:"is_public"`
+		Examples     []entity.Example `json:"examples,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -268,6 +268,89 @@ func (c *PersonaController) PersonaChat(ctx context.Context, w http.ResponseWrit
 	}
 
 	ReplySuccess(w, resp, logid)
+}
+
+// PersonaChatStream 角色卡流式对话（SSE）
+// 事件序列：session -> answer* -> done | error
+func (c *PersonaController) PersonaChatStream(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	logid := log.GetLogID(ctx)
+	logCtx := log.WithLogID(ctx, logid)
+	claims := GetUserFromContext(ctx)
+
+	if claims == nil {
+		ReplyError(w, 401, "未登录", logid)
+		return
+	}
+	if r.Method != http.MethodPost {
+		ReplyError(w, 404, "只支持 POST 方法", logid)
+		return
+	}
+
+	var req entity.PersonaChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ReplyError(w, 400, "解析请求失败", logid)
+		return
+	}
+	if req.PersonaID == 0 {
+		ReplyError(w, 400, "缺少 persona_id 参数", logid)
+		return
+	}
+	if req.Message == "" {
+		ReplyError(w, 400, "消息不能为空", logid)
+		return
+	}
+
+	// SSE 响应头
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	chunkCh := make(chan persona.PersonaStreamChunk, 64)
+	doneCh := make(chan struct{})
+	var sessID, pName, full string
+	var runErr error
+	go func() {
+		sessID, pName, full, runErr = c.chatSvc.ChatStream(logCtx, claims.UserID, &req, chunkCh)
+		close(doneCh)
+	}()
+
+	sessionSent := false
+	for chunk := range chunkCh {
+		if !sessionSent && sessID != "" {
+			writeSSE(w, flusher, "session", map[string]string{
+				"session_id":   sessID,
+				"persona_name": pName,
+			})
+			sessionSent = true
+		}
+		writeSSE(w, flusher, chunk.Type, map[string]string{"content": chunk.Content})
+	}
+	<-doneCh
+
+	// 若 session 事件因无 token 未发送，兜底补发（错误场景客户端也需要 session_id）
+	if !sessionSent && sessID != "" {
+		writeSSE(w, flusher, "session", map[string]string{
+			"session_id":   sessID,
+			"persona_name": pName,
+		})
+	}
+
+	if runErr != nil {
+		msg := runErr.Error()
+		if runErr == persona.ErrPersonaNotFound {
+			msg = "角色卡不存在"
+		}
+		log.Error(logCtx, "PersonaController.PersonaChatStream: err=%v", runErr)
+		writeSSE(w, flusher, "error", map[string]string{"content": msg})
+		return
+	}
+	writeSSE(w, flusher, "done", map[string]string{"full_response": full})
 }
 
 // PersonaSessions 获取用户的会话列表

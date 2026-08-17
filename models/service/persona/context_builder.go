@@ -22,9 +22,10 @@ const (
 	MaxExamples = 3
 )
 
-// LLMService LLM服务接口（用于摘要生成）
+// LLMService LLM服务接口（用于摘要生成 / 流式对话）
 type LLMService interface {
 	Chat(ctx context.Context, messages []api.Message) (string, error)
+	ChatStream(ctx context.Context, messages []api.Message, tokenCh chan<- string) error
 }
 
 // ContextBuilder 上下文构建器

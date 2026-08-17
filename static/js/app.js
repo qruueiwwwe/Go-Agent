@@ -706,7 +706,7 @@ const app = createApp({
         },
 
         /**
-         * 处理角色对话发送
+         * 处理角色对话发送（默认流式 SSE）
          */
         async handlePersonaSendMessage(userMessage) {
             if (!userMessage || !userMessage.trim()) return;
@@ -718,29 +718,48 @@ const app = createApp({
                 content: userMessage
             });
 
+            // 预插入 assistant 占位气泡，用于流式追加。
+            // Vue 3 的响应式基于 Proxy：必须通过数组下标访问代理对象后再修改属性，
+            // 直接改 addPersonaMessage 返回的裸对象不会触发视图更新。
+            this.addPersonaMessage({
+                type: 'assistant',
+                content: ''
+            });
+            const assistantIdx = this.personaMessages.length - 1;
+
             this.loading = true;
 
             try {
-                const response = await API.persona.chat(
+                await API.persona.chatStream(
                     this.currentPersona.id,
                     userMessage,
-                    this.personaSessionId
+                    this.personaSessionId,
+                    {
+                        session: (d) => {
+                            if (d && d.session_id) {
+                                this.personaSessionId = d.session_id;
+                            }
+                        },
+                        answer: (d) => {
+                            if (d && d.content) {
+                                this.personaMessages[assistantIdx].content += d.content;
+                            }
+                        },
+                        done: (_d) => {
+                            // 服务端已发送完整 full_response，无需覆盖
+                        },
+                        error: (d) => {
+                            const m = this.personaMessages[assistantIdx];
+                            m.type = 'error';
+                            m.content = `错误: ${(d && d.content) || '未知错误'}`;
+                        },
+                    }
                 );
-
-                // 保存会话ID
-                this.personaSessionId = response.session_id;
-
-                // 添加助手消息
-                this.addPersonaMessage({
-                    type: 'assistant',
-                    content: response.response
-                });
             } catch (error) {
                 const errorMsg = errorHandler.handle(error);
-                this.addPersonaMessage({
-                    type: 'error',
-                    content: `错误: ${errorMsg}`
-                });
+                const m = this.personaMessages[assistantIdx];
+                m.type = 'error';
+                m.content = `错误: ${errorMsg}`;
                 errorHandler.log(error, '角色对话失败');
             } finally {
                 this.loading = false;

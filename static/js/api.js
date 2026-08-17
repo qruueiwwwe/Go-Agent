@@ -560,6 +560,77 @@ export const personaAPI = {
     },
 
     /**
+     * 角色卡流式对话（SSE）
+     * @param {number} personaId
+     * @param {string} message
+     * @param {string|null} sessionId
+     * @param {Object} handlers - { session, answer, done, error } 四个可选回调
+     * @returns {Promise<void>} 结束或异常时 resolve/reject
+     */
+    async chatStream(personaId, message, sessionId, handlers = {}) {
+        const token = localStorage.getItem('token');
+        if (token && isTokenExpiredLocally()) {
+            handleAuthExpired();
+            throw new AuthExpiredError();
+        }
+        const body = { persona_id: personaId, message };
+        if (sessionId) body.session_id = sessionId;
+
+        const resp = await fetch(`${API_BASE_URL}/persona/chat/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body),
+        });
+        if (resp.status === 401) {
+            handleAuthExpired();
+            throw new AuthExpiredError();
+        }
+        if (!resp.ok || !resp.body) {
+            throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            // SSE 帧以 "\n\n" 分隔
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+                const frame = buf.slice(0, idx);
+                buf = buf.slice(idx + 2);
+                if (!frame.trim()) continue;
+                let ev = 'message';
+                const dataLines = [];
+                for (const line of frame.split('\n')) {
+                    if (line.startsWith('event:')) {
+                        ev = line.slice(6).trim();
+                    } else if (line.startsWith('data:')) {
+                        dataLines.push(line.slice(5).trim());
+                    }
+                }
+                if (dataLines.length === 0) continue;
+                let data;
+                try {
+                    data = JSON.parse(dataLines.join('\n'));
+                } catch (_) {
+                    data = { content: dataLines.join('\n') };
+                }
+                const handler = handlers[ev];
+                if (typeof handler === 'function') {
+                    handler(data);
+                }
+            }
+        }
+    },
+
+    /**
      * 获取角色卡会话列表
      * @param {number} personaId - 角色卡ID（可选）
      * @returns {Promise<Array>} 会话列表

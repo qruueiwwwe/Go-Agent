@@ -13,6 +13,7 @@ func RegisterPersonaRoutes(group *GroupRouter, personaCtrl *controllers.PersonaC
 	persona.POST("/update", Wrap(personaCtrl.PersonaUpdate))
 	persona.POST("/delete", Wrap(personaCtrl.PersonaDelete))
 	persona.POST("/chat", Wrap(personaCtrl.PersonaChat))
+	persona.POST("/chat/stream", Wrap(personaCtrl.PersonaChatStream))
 	persona.GET("/sessions", Wrap(personaCtrl.PersonaSessions))
 	persona.GET("/history", Wrap(personaCtrl.PersonaHistory))
 }

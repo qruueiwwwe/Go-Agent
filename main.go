@@ -232,7 +232,7 @@ func main() {
 	// 初始化 Agent 服务
 	contextBudget := os.Getenv("CONTEXT_BUDGET")
 	agentSvc := agent.NewAgentService(ollamaSvc, zhipuSvc, toolManager, contextBudget)
-	log.Info(ctx, "Agent 服务初始化完成，CONTEXT_BUDGET=%s", contextBudget)
+	log.Info(ctx, "Agent 服务初始化完成，CONTEXT_BUDGET=%q (空值表示默认 64k)", contextBudget)
 
 	// 初始化控制器
 	var chatDAO *dao.ChatDAO
@@ -258,10 +258,12 @@ func main() {
 
 		// 创建智谱适配器函数
 		var zhipuChatFunc func(ctx context.Context, msgs []api.Message) (string, error)
+		var zhipuStreamFunc func(ctx context.Context, msgs []api.Message, tokenCh chan<- string) error
 		if zhipuSvc != nil {
 			zhipuChatFunc = zhipuSvc.ChatWithAPIMessages
+			zhipuStreamFunc = zhipuSvc.ChatStreamWithAPIMessages
 		}
-		chatSvc := persona.NewChatService(personaDAO, personaChatDAO, personaExampleDAO, ollamaSvc, zhipuChatFunc)
+		chatSvc := persona.NewChatService(personaDAO, personaChatDAO, personaExampleDAO, ollamaSvc, zhipuChatFunc, zhipuStreamFunc)
 
 		personaCtrl = controllers.NewPersonaController(personaSvc, chatSvc)
 		log.Info(ctx, "角色卡服务初始化完成")

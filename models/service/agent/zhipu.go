@@ -256,6 +256,20 @@ func (s *ZhipuService) ChatWithAPIMessages(ctx context.Context, messages []api.M
 	return s.Chat(ctx, zhipuMsgs)
 }
 
+// ChatStreamWithAPIMessages 使用 api.Message 格式发起流式对话（适配器方法）
+// 仅需要正文 token 时，reasoning 通道置 nil；走免费模型档位。
+func (s *ZhipuService) ChatStreamWithAPIMessages(ctx context.Context, messages []api.Message, tokenCh chan<- string) error {
+	zhipuMsgs := make([]zhipuMessage, len(messages))
+	for i, m := range messages {
+		zhipuMsgs[i] = zhipuMessage{
+			Role:    m.Role,
+			Content: m.Content,
+		}
+	}
+	model, apiKey, _ := s.SelectModelAndKey(false)
+	return s.ChatStream(ctx, zhipuMsgs, model, apiKey, tokenCh, nil)
+}
+
 // ChatWithModel 允许指定模型与 API Key（用于付费推理模型）
 func (s *ZhipuService) ChatWithModel(ctx context.Context, messages []zhipuMessage, model, apiKey string, maxTokens int) (string, error) {
 	if apiKey == "" {

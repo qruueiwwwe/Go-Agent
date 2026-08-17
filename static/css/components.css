@@ -2172,25 +2172,22 @@
 }
 
 .persona-mode .message {
-    max-width: 80%;
-    padding: var(--space-4);
-    border-radius: var(--radius-lg);
+    /* 外层仅负责布局对齐，背景与圆角交给内层 .message-content
+       与普通聊天保持一致，避免"双层气泡" */
+    max-width: 100%;
 }
 
-.persona-mode .message.user {
-    margin-left: auto;
+.persona-mode .message.user .message-content {
     background: var(--accent-primary);
-    color: white;
+    color: #fff;
 }
 
-.persona-mode .message.assistant {
-    margin-right: auto;
+.persona-mode .message.assistant .message-content {
     background: var(--bg-secondary);
     color: var(--text-primary);
 }
 
-.persona-mode .message.error {
-    margin-right: auto;
+.persona-mode .message.error .message-content {
     background: var(--color-error-light);
     color: var(--error);
 }

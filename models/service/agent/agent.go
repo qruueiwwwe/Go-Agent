@@ -549,24 +549,33 @@ func extractCandidateCities(input string) []string {
 
 func getContextBudget(mode string) (int, int) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "2k":
+		return 2000, 8
 	case "4k":
 		return 4000, 12
-	case "2k", "":
-		return 2000, 8
+	case "8k":
+		return 8000, 16
+	case "16k":
+		return 16000, 20
+	case "32k":
+		return 32000, 30
+	case "64k", "":
+		// 默认 64k：覆盖长对话与代码类追问
+		return 64000, 40
 	default:
-		return 2000, 8
+		return 64000, 40
 	}
 }
 
+// trimHistory 按预算裁剪历史消息。
+// 预算 maxChars 仅覆盖"历史消息 + 本轮 userMessage"，不含 systemPrompt——避免固定 prompt 挤占预算导致零上下文。
+// 极端情况下（单条已超预算）至少保留最近 1 条 user/assistant，防止彻底失忆。
 func (s *AgentService) trimHistory(history []api.Message, userMessage string) []api.Message {
 	if len(history) == 0 {
 		return nil
 	}
 
-	usedChars := len(s.systemPrompt) + len(userMessage)
-	if usedChars >= s.maxChars {
-		return nil
-	}
+	usedChars := len(userMessage)
 
 	keptReversed := make([]api.Message, 0, len(history))
 	for i := len(history) - 1; i >= 0; i-- {
@@ -579,6 +588,10 @@ func (s *AgentService) trimHistory(history []api.Message, userMessage string) []
 		}
 		contentLen := len(msg.Content)
 		if usedChars+contentLen > s.maxChars {
+			// 兜底：一条都没保留时，至少保留最近这一条，避免零上下文
+			if len(keptReversed) == 0 {
+				keptReversed = append(keptReversed, msg)
+			}
 			break
 		}
 		usedChars += contentLen
@@ -667,10 +680,12 @@ func (s *AgentService) ProcessStream(ctx context.Context, userMessage string, hi
 		chunkCh <- StreamChunk{Type: ChunkToolResult, Tool: toolName, Content: toolResult}
 
 		// 第二次流式：让模型基于工具结果给出面向用户的答复
-		secondMsgs := []api.Message{
-			{Role: "system", Content: sysPrompt},
-			{Role: "user", Content: fmt.Sprintf("用户问题：%s\n\n工具「%s」的执行结果如下：\n%s\n\n请仅基于工具结果，用自然语言回答用户问题。禁止再输出任何工具调用 JSON。", userMessage, toolName, toolResult)},
-		}
+		secondMsgs := []api.Message{{Role: "system", Content: sysPrompt}}
+		secondMsgs = append(secondMsgs, trimmed...)
+		secondMsgs = append(secondMsgs, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("用户问题：%s\n\n工具「%s」的执行结果如下：\n%s\n\n请仅基于工具结果，用自然语言回答用户问题。禁止再输出任何工具调用 JSON。", userMessage, toolName, toolResult),
+		})
 		// 二次调用时使用普通答案（不再输出思考标签），采用 Auto 语义
 		var secondThought, secondAnswer string
 		if s.zhipuSvc != nil {

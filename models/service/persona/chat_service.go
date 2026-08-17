@@ -3,6 +3,7 @@ package persona
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"agent/library/log"
 	"agent/models/dao"
@@ -20,6 +21,7 @@ type ChatService struct {
 	contextBuilder *ContextBuilder
 	ollamaSvc      LLMService
 	zhipuChat      func(ctx context.Context, msgs []api.Message) (string, error)
+	zhipuStream    func(ctx context.Context, msgs []api.Message, tokenCh chan<- string) error
 }
 
 // NewChatService 创建角色卡对话服务
@@ -29,6 +31,7 @@ func NewChatService(
 	exampleDAO *dao.PersonaExampleDAO,
 	ollamaSvc LLMService,
 	zhipuChat func(ctx context.Context, msgs []api.Message) (string, error),
+	zhipuStream func(ctx context.Context, msgs []api.Message, tokenCh chan<- string) error,
 ) *ChatService {
 	contextBuilder := NewContextBuilder(ollamaSvc)
 	return &ChatService{
@@ -38,6 +41,7 @@ func NewChatService(
 		contextBuilder: contextBuilder,
 		ollamaSvc:      ollamaSvc,
 		zhipuChat:      zhipuChat,
+		zhipuStream:    zhipuStream,
 	}
 }
 
@@ -153,6 +157,138 @@ func (s *ChatService) Chat(ctx context.Context, userID int64, req *entity.Person
 		PersonaID:   persona.ID,
 		PersonaName: persona.Name,
 	}, nil
+}
+
+// PersonaStreamChunk 流式返回单元
+type PersonaStreamChunk struct {
+	Type    string // "answer" | "error"
+	Content string
+}
+
+// ChatStream 角色卡流式对话
+// chunkCh 由调用方创建，本方法负责在结束前 close。
+// 返回 sessionID / personaName / 完整拼接文本 / err。
+func (s *ChatService) ChatStream(
+	ctx context.Context,
+	userID int64,
+	req *entity.PersonaChatRequest,
+	chunkCh chan<- PersonaStreamChunk,
+) (sessionID string, personaName string, fullResponse string, err error) {
+	defer func() {
+		// 由本方法关闭 chunkCh，简化调用方
+		close(chunkCh)
+	}()
+
+	// 1. 获取角色卡
+	persona, err := s.personaDAO.FindByID(ctx, req.PersonaID)
+	if err != nil {
+		return "", "", "", err
+	}
+	if persona == nil {
+		return "", "", "", ErrPersonaNotFound
+	}
+	personaName = persona.Name
+
+	// 加载示例对话
+	examples, exErr := s.exampleDAO.FindByPersonaID(ctx, req.PersonaID)
+	if exErr != nil {
+		log.Error(ctx, "ChatService.ChatStream: 加载示例失败 personaID=%d, err=%v", req.PersonaID, exErr)
+	} else {
+		persona.Examples = examples
+	}
+
+	// 2. 会话
+	sessionID = req.SessionID
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+		log.Info(ctx, "ChatService.ChatStream: 创建新会话 sessionID=%s, personaID=%d", sessionID, req.PersonaID)
+	} else {
+		log.Info(ctx, "ChatService.ChatStream: 继续会话 sessionID=%s, personaID=%d", sessionID, req.PersonaID)
+	}
+
+	// 3. 历史
+	history, hErr := s.chatDAO.FindBySession(ctx, userID, sessionID)
+	if hErr != nil {
+		log.Error(ctx, "ChatService.ChatStream: 加载历史失败 sessionID=%s, err=%v", sessionID, hErr)
+		history = nil
+	}
+	log.Info(ctx, "ChatService.ChatStream: 加载历史消息 count=%d", len(history))
+
+	// 4. 构建上下文
+	msgs := s.contextBuilder.Build(persona, history, req.Message)
+	log.Info(ctx, "ChatService.ChatStream: 构建上下文完成 messageCount=%d", len(msgs))
+
+	// 5. 流式调用 LLM
+	tokenCh := make(chan string, 32)
+	doneCh := make(chan error, 1)
+	var used string
+	go func() {
+		var e error
+		if s.ollamaSvc != nil {
+			e = s.ollamaSvc.ChatStream(ctx, msgs, tokenCh)
+			if e == nil {
+				used = "Ollama"
+			} else {
+				log.Warn(ctx, "ChatService.ChatStream: Ollama失败 err=%v", e)
+			}
+		}
+		if used == "" && s.zhipuStream != nil {
+			e = s.zhipuStream(ctx, msgs, tokenCh)
+			if e == nil {
+				used = "智谱"
+			} else {
+				log.Error(ctx, "ChatService.ChatStream: 智谱流式失败 err=%v", e)
+			}
+		}
+		close(tokenCh)
+		doneCh <- e
+	}()
+
+	var sb strings.Builder
+	for tk := range tokenCh {
+		sb.WriteString(tk)
+		select {
+		case <-ctx.Done():
+			// 消费者不再关注：耗尽后端 goroutine 后返回
+			for range tokenCh {
+			}
+			<-doneCh
+			return sessionID, personaName, sb.String(), ctx.Err()
+		default:
+			chunkCh <- PersonaStreamChunk{Type: "answer", Content: tk}
+		}
+	}
+	backendErr := <-doneCh
+
+	fullResponse = sb.String()
+	if fullResponse == "" {
+		if backendErr != nil {
+			return sessionID, personaName, "", backendErr
+		}
+		return sessionID, personaName, "", ErrLLMUnavailable
+	}
+	log.Info(ctx, "ChatService.ChatStream: AI响应[%s] len=%d", used, len(fullResponse))
+
+	// 6. 落库
+	if e := s.chatDAO.Create(ctx, &entity.PersonaChat{
+		UserID: userID, PersonaID: req.PersonaID, SessionID: sessionID,
+		Role: "user", Content: req.Message,
+	}); e != nil {
+		log.Error(ctx, "ChatService.ChatStream: 保存用户消息失败 err=%v", e)
+	}
+	if e := s.chatDAO.Create(ctx, &entity.PersonaChat{
+		UserID: userID, PersonaID: req.PersonaID, SessionID: sessionID,
+		Role: "assistant", Content: fullResponse,
+	}); e != nil {
+		log.Error(ctx, "ChatService.ChatStream: 保存AI消息失败 err=%v", e)
+	}
+
+	// 7. 使用次数
+	if e := s.personaDAO.IncrementUsage(ctx, req.PersonaID); e != nil {
+		log.Error(ctx, "ChatService.ChatStream: 更新使用次数失败 err=%v", e)
+	}
+
+	return sessionID, personaName, fullResponse, nil
 }
 
 // GetSessions 获取用户的会话列表
