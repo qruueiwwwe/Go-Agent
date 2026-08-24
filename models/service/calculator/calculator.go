@@ -13,6 +13,20 @@ import (
 	"agent/library/log"
 )
 
+var (
+	// allowedExprChars 去掉合法函数名后，表达式只允许出现这些字符
+	allowedExprChars = regexp.MustCompile(`^[0-9.+\-*/^(),]*$`)
+	// identifierRe 标识符（函数名 / 变量名）
+	identifierRe = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+	// operatorRe 二元运算符
+	operatorRe = regexp.MustCompile(`[+\-*/^]`)
+
+	// allowedFunctions 支持的函数白名单
+	allowedFunctions = map[string]bool{"pow": true, "abs": true, "sqrt": true}
+)
+
+const errUnrecognized = "计算错误：无法识别的表达式"
+
 // Calculator 计算器逻辑
 type Calculator struct{}
 
@@ -28,12 +42,15 @@ func (c *Calculator) Description() string {
 	return "用于数学计算，支持复杂表达式：1+2*3, 2^16-1, 2**16-1"
 }
 
-func (c *Calculator) Execute(ctx context.Context, input string) string {
+func (c *Calculator) Execute(ctx context.Context, input string) (output string) {
 	log.Info(ctx, "Calculator.Execute: 入参 input=%s", input)
+
+	raw := input // 保留原始入参用于错误文案
 
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error(ctx, "Calculator.Execute: panic恢复: %v", r)
+			output = fmt.Sprintf("计算错误：无法解析表达式 %s", raw)
 		}
 	}()
 
@@ -42,6 +59,12 @@ func (c *Calculator) Execute(ctx context.Context, input string) string {
 
 	// 将 Python 风格的幂运算符 ** 替换为 ^
 	input = strings.ReplaceAll(input, "**", "^")
+
+	// 校验表达式合法性，拦住非法输入，避免 govaluate 把未知标识符当变量导致 panic
+	if errMsg := validateExpression(input); errMsg != "" {
+		log.Error(ctx, "Calculator.Execute: 表达式校验失败 input=%s, err=%s", raw, errMsg)
+		return errMsg
+	}
 
 	// 添加 pow 函数
 	functions := map[string]govaluate.ExpressionFunction{
@@ -102,6 +125,15 @@ func (c *Calculator) Execute(ctx context.Context, input string) string {
 	var resultStr string
 	switch v := result.(type) {
 	case float64:
+		// govaluate 对除零返回 ±Inf，对 0/0 返回 NaN
+		if math.IsInf(v, 0) {
+			log.Error(ctx, "Calculator.Execute: 结果为无穷 input=%s", input)
+			return "计算错误：除数不能为0"
+		}
+		if math.IsNaN(v) {
+			log.Error(ctx, "Calculator.Execute: 结果为 NaN input=%s", input)
+			return "计算错误：无法计算"
+		}
 		// 如果是整数，不显示小数
 		if v == float64(int64(v)) {
 			resultStr = fmt.Sprintf("%.0f", v)
@@ -124,6 +156,39 @@ func (c *Calculator) Execute(ctx context.Context, input string) string {
 
 	log.Info(ctx, "Calculator.Execute: 计算成功 %s=%s", input, resultStr)
 	return resultStr
+}
+
+// validateExpression 校验表达式合法性，返回空串表示合法。
+// 入参必须是已去空格、已把 ** 归一为 ^ 之后的表达式。
+func validateExpression(expr string) string {
+	if expr == "" {
+		return errUnrecognized
+	}
+
+	// 未知标识符：govaluate 会当作变量处理，Evaluate(nil) 会 panic
+	for _, id := range identifierRe.FindAllString(expr, -1) {
+		if !allowedFunctions[id] {
+			return fmt.Sprintf("计算错误：无法解析数字 %s", id)
+		}
+	}
+
+	// 字符白名单，未承诺支持的运算符（如 %）在此被拒绝
+	if !allowedExprChars.MatchString(identifierRe.ReplaceAllString(expr, "")) {
+		return errUnrecognized
+	}
+
+	// 首字符只允许数字、左括号、函数名和一元负号
+	switch expr[0] {
+	case '+', '*', '/', '^', ')', ',':
+		return errUnrecognized
+	}
+
+	// 纯数字不构成计算表达式
+	if !operatorRe.MatchString(expr) && !strings.Contains(expr, "(") {
+		return errUnrecognized
+	}
+
+	return ""
 }
 
 // toFloat64 将任意类型转换为 float64

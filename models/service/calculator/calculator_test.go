@@ -32,7 +32,7 @@ func TestCalculator_Execute_Addition(t *testing.T) {
 		{"Simple addition", "1+2", "3"},
 		{"Large numbers", "100+200", "300"},
 		{"Negative numbers", "-5+3", "-2"},
-		{"Decimals", "1.5+2.5", "4.000000"},
+		{"Decimals", "1.5+2.5", "4"},
 		{"With spaces", "1 + 2", "3"},
 	}
 
@@ -58,7 +58,7 @@ func TestCalculator_Execute_Subtraction(t *testing.T) {
 		{"Simple subtraction", "5-3", "2"},
 		{"Negative result", "3-5", "-2"},
 		{"Large numbers", "1000-500", "500"},
-		{"Decimals", "5.5-2.5", "3.000000"},
+		{"Decimals", "5.5-2.5", "3"},
 	}
 
 	for _, tt := range tests {
@@ -83,7 +83,7 @@ func TestCalculator_Execute_Multiplication(t *testing.T) {
 		{"Simple multiplication", "3*4", "12"},
 		{"Zero", "5*0", "0"},
 		{"Negative", "-3*4", "-12"},
-		{"Decimals", "2.5*4", "10.000000"},
+		{"Decimals", "2.5*4", "10"},
 	}
 
 	for _, tt := range tests {
@@ -106,7 +106,7 @@ func TestCalculator_Execute_Division(t *testing.T) {
 		expected string
 	}{
 		{"Simple division", "6/3", "2"},
-		{"Decimals", "5/2", "2.500000"},
+		{"Decimals", "5/2", "2.5"},
 		{"Division by integer", "10/5", "2"},
 	}
 
@@ -144,6 +144,33 @@ func TestCalculator_Execute_InvalidInput(t *testing.T) {
 		{"Empty input", "", "计算错误：无法识别的表达式"},
 		{"Missing operand", "+3", "计算错误：无法识别的表达式"},
 		{"Invalid number", "a+b", "计算错误：无法解析数字 a"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := c.Execute(ctx, tt.input)
+			if result != tt.expected {
+				t.Errorf("Execute(%s) = %s, expected %s", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCalculator_Execute_PowerAndFunctions(t *testing.T) {
+	c := NewCalculator()
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"Caret power", "2^16-1", "65535"},
+		{"Python style power", "2**16-1", "65535"},
+		{"Pow function", "pow(2,3)", "8"},
+		{"Sqrt function", "sqrt(16)", "4"},
+		{"Abs function", "abs(-3)", "3"},
+		{"Zero divided by zero", "0/0", "计算错误：无法计算"},
 	}
 
 	for _, tt := range tests {

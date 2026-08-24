@@ -1,5 +1,5 @@
 # 多阶段构建 - 构建阶段
-FROM golang:1.24.1-alpine AS builder
+FROM golang:1.25.0-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
